@@ -7,6 +7,10 @@ build/
 .next/
 .vite/
 DerivedData/
+.build/
+
+config.local.json
+config.*.local.json
 
 .env
 .env.*

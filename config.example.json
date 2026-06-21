@@ -1,0 +1,16 @@
+{
+  "windowTitle": "ReplayCenter",
+  "vlcArguments": [],
+  "networkCachingMs": 1000,
+  "deinterlace": "yadif",
+  "mediaOptions": [],
+  "audioOnlyFocusedTile": true,
+  "startMuted": true,
+  "audioMode": "stereo",
+  "streams": [
+    {
+      "title": "Example MPEG2 raw TS",
+      "url": "https://epgstation.example.local/api/streams/live/CHANNEL_ID/m2ts?mode=0"
+    }
+  ]
+}
