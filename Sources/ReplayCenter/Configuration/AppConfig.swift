@@ -85,6 +85,38 @@ struct TileLayoutConfig: Decodable, Equatable {
         "\(columns)x\(rows)"
     }
 
+    var nextLarger: TileLayoutConfig? {
+        switch (columns, rows) {
+        case (1, 1):
+            return TileLayoutConfig(columns: 2, rows: 1)
+        case (2, 1):
+            return TileLayoutConfig(columns: 2, rows: 2)
+        case (2, 2):
+            return TileLayoutConfig(columns: 3, rows: 2)
+        case (3, 2), (2, 3):
+            return TileLayoutConfig(columns: 3, rows: 3)
+        default:
+            return nil
+        }
+    }
+
+    var nextSmaller: TileLayoutConfig? {
+        switch (columns, rows) {
+        case (3, 3):
+            return TileLayoutConfig(columns: 3, rows: 2)
+        case (2, 3):
+            return TileLayoutConfig(columns: 2, rows: 2)
+        case (3, 2):
+            return TileLayoutConfig(columns: 2, rows: 2)
+        case (2, 2):
+            return TileLayoutConfig(columns: 2, rows: 1)
+        case (2, 1):
+            return TileLayoutConfig(columns: 1, rows: 1)
+        default:
+            return nil
+        }
+    }
+
     static func automatic(tileCount: Int) -> TileLayoutConfig {
         guard tileCount > 0 else { return .fallback }
         let columns = Int(ceil(sqrt(Double(tileCount))))

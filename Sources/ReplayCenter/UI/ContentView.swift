@@ -107,6 +107,12 @@ struct ContentView: View {
         case "c":
             openChannelSelector()
             return .handled
+        case "+", "=":
+            model.increaseTileCapacity()
+            return .handled
+        case "-":
+            model.decreaseTileCapacity()
+            return .handled
         default:
             return .ignored
         }

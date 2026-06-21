@@ -61,8 +61,10 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         window.title = config.windowTitle ?? "ReplayCenter"
         window.delegate = self
         window.isReleasedWhenClosed = false
-        window.contentAspectRatio = tileGrid.layout.gridAspectRatio
-        window.contentMinSize = tileGrid.layout.minimumWindowSize
+        applyWindowLayout(tileGrid.layout, to: window, resize: false)
+        tileGrid.onLayoutChanged = { [weak self] layout in
+            self?.applyWindowLayout(layout, resize: true)
+        }
         window.contentView = NSHostingView(rootView: view)
         window.makeKeyAndOrderFront(nil)
         self.window = window
@@ -138,5 +140,22 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         appMenuItem.submenu = appMenu
 
         NSApp.mainMenu = mainMenu
+    }
+
+    private func applyWindowLayout(_ layout: TileLayoutConfig, resize: Bool) {
+        guard let window else { return }
+        applyWindowLayout(layout, to: window, resize: resize)
+    }
+
+    private func applyWindowLayout(_ layout: TileLayoutConfig, to window: NSWindow, resize: Bool) {
+        window.contentAspectRatio = layout.gridAspectRatio
+        window.contentMinSize = layout.minimumWindowSize
+        guard resize, !window.styleMask.contains(.fullScreen) else { return }
+
+        let currentSize = window.contentLayoutRect.size
+        let aspect = layout.gridAspectRatio.width / layout.gridAspectRatio.height
+        let targetWidth = max(currentSize.width, layout.minimumWindowSize.width)
+        let targetHeight = max(targetWidth / aspect, layout.minimumWindowSize.height)
+        window.setContentSize(CGSize(width: targetWidth, height: targetHeight))
     }
 }
