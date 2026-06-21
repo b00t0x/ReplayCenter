@@ -12,6 +12,7 @@ struct AppConfig: Decodable {
     var audioOnlyFocusedTile: Bool?
     var startMuted: Bool?
     var audioMode: AudioMode?
+    var tileLayout: TileLayoutConfig?
     var streams: [StreamConfig]
 
     static let empty = AppConfig(
@@ -26,6 +27,7 @@ struct AppConfig: Decodable {
         audioOnlyFocusedTile: true,
         startMuted: true,
         audioMode: .stereo,
+        tileLayout: nil,
         streams: []
     )
 
@@ -45,9 +47,54 @@ struct AppConfig: Decodable {
             "audioOnlyFocusedTile=\(audioOnlyFocusedTile.map(String.init) ?? "<nil>")",
             "startMuted=\(startMuted.map(String.init) ?? "<nil>")",
             "audioMode=\(audioMode?.rawValue ?? "<nil>")",
+            "tileLayout=\(tileLayout?.summary ?? "<auto>")",
             "vlcArguments=\(vlcArguments ?? [])",
             "mediaOptions=\(mediaOptions ?? [])"
         ].joined(separator: " ")
+    }
+}
+
+struct TileLayoutConfig: Decodable, Equatable {
+    let columns: Int
+    let rows: Int
+
+    static let fallback = TileLayoutConfig(columns: 1, rows: 1)
+
+    var validOrFallback: TileLayoutConfig {
+        guard columns > 0, rows > 0 else { return .fallback }
+        return self
+    }
+
+    var tileCount: Int {
+        columns * rows
+    }
+
+    var gridAspectRatio: CGSize {
+        CGSize(width: columns * 16, height: rows * 9)
+    }
+
+    var initialWindowSize: CGSize {
+        CGSize(width: columns * 640, height: rows * 360)
+    }
+
+    var minimumWindowSize: CGSize {
+        CGSize(width: columns * 160, height: rows * 90)
+    }
+
+    var summary: String {
+        "\(columns)x\(rows)"
+    }
+
+    static func automatic(tileCount: Int) -> TileLayoutConfig {
+        guard tileCount > 0 else { return .fallback }
+        let columns = Int(ceil(sqrt(Double(tileCount))))
+        let rows = Int(ceil(Double(tileCount) / Double(columns)))
+        return TileLayoutConfig(columns: columns, rows: rows)
+    }
+
+    func fitting(streamCount: Int) -> TileLayoutConfig {
+        guard streamCount > tileCount else { return self }
+        return .automatic(tileCount: streamCount)
     }
 }
 

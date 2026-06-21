@@ -10,6 +10,10 @@
   "audioOnlyFocusedTile": true,
   "startMuted": true,
   "audioMode": "stereo",
+  "tileLayout": {
+    "columns": 1,
+    "rows": 1
+  },
   "streams": [
     {
       "title": "Example MPEG2 raw TS",

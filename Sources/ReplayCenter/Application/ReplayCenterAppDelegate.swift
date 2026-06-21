@@ -53,7 +53,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         let view = ContentView(model: tileGrid, channelCatalog: channelCatalog)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 140, y: 140, width: 1280, height: 720),
+            contentRect: NSRect(origin: NSPoint(x: 140, y: 140), size: tileGrid.layout.initialWindowSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -61,6 +61,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         window.title = config.windowTitle ?? "ReplayCenter"
         window.delegate = self
         window.isReleasedWhenClosed = false
+        window.contentAspectRatio = tileGrid.layout.gridAspectRatio
+        window.contentMinSize = tileGrid.layout.minimumWindowSize
         window.contentView = NSHostingView(rootView: view)
         window.makeKeyAndOrderFront(nil)
         self.window = window

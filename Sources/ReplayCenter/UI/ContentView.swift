@@ -43,10 +43,11 @@ struct ContentView: View {
 
     private var tileGrid: some View {
         GeometryReader { proxy in
-            let columns = Int(ceil(sqrt(Double(model.tiles.count))))
-            let rows = Int(ceil(Double(model.tiles.count) / Double(columns)))
-            let cellWidth = proxy.size.width / CGFloat(columns)
-            let cellHeight = proxy.size.height / CGFloat(rows)
+            let columns = model.layout.columns
+            let rows = model.layout.rows
+            let gridSize = fittedGridSize(in: proxy.size)
+            let cellWidth = gridSize.width / CGFloat(columns)
+            let cellHeight = gridSize.height / CGFloat(rows)
 
             LazyVGrid(
                 columns: Array(repeating: GridItem(.fixed(cellWidth), spacing: 0), count: columns),
@@ -61,7 +62,20 @@ struct ContentView: View {
                     .frame(width: cellWidth, height: cellHeight)
                 }
             }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+            .frame(width: gridSize.width, height: gridSize.height, alignment: .topLeading)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
+        }
+    }
+
+    private func fittedGridSize(in availableSize: CGSize) -> CGSize {
+        guard availableSize.width > 0, availableSize.height > 0 else { return .zero }
+        let aspect = model.layout.gridAspectRatio.width / model.layout.gridAspectRatio.height
+        let availableAspect = availableSize.width / availableSize.height
+
+        if availableAspect > aspect {
+            return CGSize(width: availableSize.height * aspect, height: availableSize.height)
+        } else {
+            return CGSize(width: availableSize.width, height: availableSize.width / aspect)
         }
     }
 

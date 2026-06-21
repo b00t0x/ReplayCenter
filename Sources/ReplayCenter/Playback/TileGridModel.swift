@@ -7,12 +7,16 @@ import SwiftVLC
 final class TileGridModel {
     var focusedIndex = 0
     let tiles: [TileModel]
+    let layout: TileLayoutConfig
     private let config: AppConfig
     private let audioOnlyFocusedTile: Bool
     private let epgStationClient: EPGStationClient?
 
     init(config: AppConfig, instance: VLCInstance) {
         self.config = config
+        self.layout = (config.tileLayout ?? .automatic(tileCount: max(config.streams.count, 1)))
+            .validOrFallback
+            .fitting(streamCount: config.streams.count)
         self.tiles = config.streams.map { TileModel(stream: $0, config: config, instance: instance) }
         self.audioOnlyFocusedTile = config.audioOnlyFocusedTile ?? true
         self.epgStationClient = config.epgStationBaseURL.map { EPGStationClient(baseURL: $0) }
