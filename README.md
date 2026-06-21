@@ -5,6 +5,7 @@ ReplayCenter is a desktop-oriented live TV viewing application for EPGStation.
 The first implementation target is a macOS app using SwiftVLC. The current
 vertical slice can load a JSON config, display live streams as tiles, play audio
 only from the focused tile, and switch dual-mono audio with `S` / `L` / `R`.
+It also contains the first EPGStation API client layer for channel selection.
 
 ## Requirements
 
@@ -28,6 +29,9 @@ ignored `config.local.json` files.
 
 Important defaults:
 
+- `epgStationBaseURL`: EPGStation host URL used by the channel selection layer
+- `liveStreamContainer`: `m2ts` or `m2tsll`
+- `liveStreamMode`: EPGStation live stream mode, with `0` commonly used for unconverted `m2ts`
 - `deinterlace`: `yadif`
 - `networkCachingMs`: `1000`
 - `audioOnlyFocusedTile`: `true`

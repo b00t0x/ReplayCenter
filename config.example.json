@@ -1,5 +1,8 @@
 {
   "windowTitle": "ReplayCenter",
+  "epgStationBaseURL": "https://epgstation.example.local/",
+  "liveStreamContainer": "m2ts",
+  "liveStreamMode": 0,
   "vlcArguments": [],
   "networkCachingMs": 1000,
   "deinterlace": "yadif",
