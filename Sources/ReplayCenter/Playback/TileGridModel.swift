@@ -17,7 +17,13 @@ final class TileGridModel {
         self.layout = (config.tileLayout ?? .automatic(tileCount: max(config.streams.count, 1)))
             .validOrFallback
             .fitting(streamCount: config.streams.count)
-        self.tiles = config.streams.map { TileModel(stream: $0, config: config, instance: instance) }
+        self.tiles = (0..<layout.tileCount).map { index in
+            TileModel(
+                stream: config.streams.indices.contains(index) ? config.streams[index] : nil,
+                config: config,
+                instance: instance
+            )
+        }
         self.audioOnlyFocusedTile = config.audioOnlyFocusedTile ?? true
         self.epgStationClient = config.epgStationBaseURL.map { EPGStationClient(baseURL: $0) }
     }
@@ -39,6 +45,7 @@ final class TileGridModel {
 
     func setFocusedAudioMode(_ mode: AudioMode) {
         guard tiles.indices.contains(focusedIndex) else { return }
+        guard tiles[focusedIndex].stream != nil else { return }
         tiles[focusedIndex].setAudioMode(mode)
     }
 
@@ -59,6 +66,12 @@ final class TileGridModel {
             mediaOptions: nil
         )
         tiles[focusedIndex].play(stream: stream)
+        focus(focusedIndex)
+    }
+
+    func clearFocusedTile() {
+        guard tiles.indices.contains(focusedIndex) else { return }
+        tiles[focusedIndex].clear()
         focus(focusedIndex)
     }
 

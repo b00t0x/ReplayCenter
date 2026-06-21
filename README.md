@@ -7,6 +7,13 @@ vertical slice can load a JSON config, display live streams as tiles, play audio
 only from the focused tile, and switch dual-mono audio with `S` / `L` / `R`.
 It also contains the first EPGStation API client layer for channel selection.
 
+Current provisional keyboard and mouse controls for development:
+
+- Click a tile to focus it.
+- Press `C` or double-click a tile to choose a channel for the focused tile.
+- Press `Delete` or `Forward Delete` to clear the focused tile.
+- Press `S`, `L`, or `R` to switch the focused tile's stereo mode.
+
 ## Requirements
 
 - macOS 15+

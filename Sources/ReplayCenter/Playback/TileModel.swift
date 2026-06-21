@@ -6,23 +6,24 @@ import SwiftVLC
 @Observable
 final class TileModel: Identifiable {
     let id = UUID()
-    private(set) var stream: StreamConfig
+    private(set) var stream: StreamConfig?
     let player: Player
     private let config: AppConfig
     private var started = false
     private var currentAudioMode: AudioMode
 
-    init(stream: StreamConfig, config: AppConfig, instance: VLCInstance) {
+    init(stream: StreamConfig?, config: AppConfig, instance: VLCInstance) {
         self.stream = stream
         self.config = config
         self.player = Player(instance: instance)
-        currentAudioMode = stream.audioMode ?? config.audioMode ?? .stereo
-        player.isMuted = stream.muted ?? config.startMuted ?? true
+        currentAudioMode = stream?.audioMode ?? config.audioMode ?? .stereo
+        player.isMuted = stream?.muted ?? config.startMuted ?? true
         player.stereoMode = currentAudioMode.stereoMode
     }
 
     func startIfNeeded() {
         guard !started else { return }
+        guard stream != nil else { return }
         started = true
         start()
     }
@@ -31,6 +32,13 @@ final class TileModel: Identifiable {
         self.stream = stream
         started = true
         start()
+    }
+
+    func clear() {
+        stream = nil
+        started = false
+        player.stop()
+        player.isMuted = true
     }
 
     func setMuted(_ muted: Bool) {
@@ -47,6 +55,7 @@ final class TileModel: Identifiable {
     }
 
     private func start() {
+        guard let stream else { return }
         guard let url = URL(string: stream.url) else {
             log("invalid url=\(stream.url)")
             return
@@ -92,6 +101,7 @@ final class TileModel: Identifiable {
     }
 
     private var effectiveDeinterlaceLabel: String {
+        guard let stream else { return config.effectiveDeinterlaceLabel }
         let streamValue = stream.deinterlace?.trimmingCharacters(in: .whitespacesAndNewlines)
         if streamValue?.isEmpty == false {
             return streamValue!
@@ -100,6 +110,7 @@ final class TileModel: Identifiable {
     }
 
     private func log(_ message: String) {
-        fputs("[\(stream.title ?? stream.url)] \(message)\n", stderr)
+        let label = stream.map { $0.title ?? $0.url } ?? "empty tile"
+        fputs("[\(label)] \(message)\n", stderr)
     }
 }

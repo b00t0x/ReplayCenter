@@ -31,7 +31,7 @@ struct ContentView: View {
         }
         .focusable()
         .onKeyPress { keyPress in
-            handleKeyPress(keyPress.characters.lowercased())
+            handleKeyPress(keyPress)
         }
         .task {
             await channelCatalog?.loadIfNeeded()
@@ -79,9 +79,20 @@ struct ContentView: View {
         }
     }
 
-    private func handleKeyPress(_ characters: String) -> KeyPress.Result {
+    private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
         guard !isChannelSelectorPresented else { return .ignored }
         guard model.tiles.indices.contains(model.focusedIndex) else { return .ignored }
+
+        if keyPress.key == .delete || keyPress.key == .deleteForward {
+            model.clearFocusedTile()
+            return .handled
+        }
+
+        let characters = keyPress.characters.lowercased()
+        if characters == "\u{7f}" || characters == "\u{8}" {
+            model.clearFocusedTile()
+            return .handled
+        }
 
         switch characters {
         case "s":
