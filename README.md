@@ -44,3 +44,7 @@ Important defaults:
 - `deinterlace`: `yadif`
 - `networkCachingMs`: `1000`
 - `audioOnlyFocusedTile`: `true`
+
+Runtime state, such as the last tile layout, is saved outside the config file in
+the user's Application Support directory. Set `REPLAYCENTER_STATE_PATH` during
+development to override the state file location.

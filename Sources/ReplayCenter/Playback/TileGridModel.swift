@@ -14,10 +14,10 @@ final class TileGridModel {
     private let audioOnlyFocusedTile: Bool
     private let epgStationClient: EPGStationClient?
 
-    init(config: AppConfig, instance: VLCInstance) {
+    init(config: AppConfig, instance: VLCInstance, restoredLayout: TileLayoutConfig? = nil) {
         self.config = config
         self.instance = instance
-        let initialLayout = (config.tileLayout ?? .automatic(tileCount: max(config.streams.count, 1)))
+        let initialLayout = (restoredLayout ?? config.tileLayout ?? .automatic(tileCount: max(config.streams.count, 1)))
             .validOrFallback
             .fitting(streamCount: config.streams.count)
         self.layout = initialLayout

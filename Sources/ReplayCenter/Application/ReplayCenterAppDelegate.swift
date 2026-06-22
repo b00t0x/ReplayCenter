@@ -6,6 +6,7 @@ import SwiftVLC
 final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let config: AppConfig
     private let configSource: String?
+    private let stateStore: AppStateStore
     private let instance: VLCInstance
     private var window: NSWindow?
     private var tileGrid: TileGridModel?
@@ -15,9 +16,10 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     private var shutdownComplete = false
     private weak var terminationReplySender: NSApplication?
 
-    init(config: AppConfig, configSource: String?) throws {
+    init(config: AppConfig, configSource: String?, stateStore: AppStateStore) throws {
         self.config = config
         self.configSource = configSource
+        self.stateStore = stateStore
 
         var arguments = VLCInstance.defaultArguments + [
             "--no-osd",
@@ -46,7 +48,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             reason: "ReplayCenter live playback"
         )
 
-        let tileGrid = TileGridModel(config: config, instance: instance)
+        let restoredState = loadSavedState()
+        let tileGrid = TileGridModel(config: config, instance: instance, restoredLayout: restoredState?.tileLayout)
         self.tileGrid = tileGrid
         let channelCatalog = config.epgStationBaseURL.map { ChannelCatalogModel(client: EPGStationClient(baseURL: $0)) }
         self.channelCatalog = channelCatalog
@@ -64,6 +67,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         applyWindowLayout(tileGrid.layout, to: window, resize: false)
         tileGrid.onLayoutChanged = { [weak self] layout in
             self?.applyWindowLayout(layout, resize: true)
+            self?.saveState(layout: layout)
         }
         window.contentView = NSHostingView(rootView: view)
         window.makeKeyAndOrderFront(nil)
@@ -100,6 +104,9 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
         guard !shuttingDown else { return }
         shuttingDown = true
+        if let tileGrid {
+            saveState(layout: tileGrid.layout)
+        }
         window?.standardWindowButton(.closeButton)?.isEnabled = false
 
         Task { @MainActor in
@@ -140,6 +147,29 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         appMenuItem.submenu = appMenu
 
         NSApp.mainMenu = mainMenu
+    }
+
+    private func loadSavedState() -> AppState? {
+        do {
+            let state = try stateStore.load()
+            if let state {
+                fputs("[app] state source=\(stateStore.url.path) tileLayout=\(state.tileLayout.summary)\n", stderr)
+            } else {
+                fputs("[app] state source=\(stateStore.url.path) <empty>\n", stderr)
+            }
+            return state
+        } catch {
+            fputs("[app] state load failed source=\(stateStore.url.path) error=\(error)\n", stderr)
+            return nil
+        }
+    }
+
+    private func saveState(layout: TileLayoutConfig) {
+        do {
+            try stateStore.save(AppState(tileLayout: layout))
+        } catch {
+            fputs("[app] state save failed target=\(stateStore.url.path) error=\(error)\n", stderr)
+        }
     }
 
     private func applyWindowLayout(_ layout: TileLayoutConfig, resize: Bool) {

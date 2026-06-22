@@ -54,7 +54,7 @@ struct AppConfig: Decodable {
     }
 }
 
-struct TileLayoutConfig: Decodable, Equatable {
+struct TileLayoutConfig: Codable, Equatable {
     let columns: Int
     let rows: Int
 
