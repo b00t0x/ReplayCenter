@@ -41,6 +41,7 @@ Important defaults:
 - `liveStreamContainer`: `m2ts` or `m2tsll`
 - `liveStreamMode`: EPGStation live stream mode, with `0` commonly used for unconverted `m2ts`
 - `tileLayout`: fixed tile grid, for example `{ "columns": 3, "rows": 2 }`
+- `startupStreams`: `configured` starts streams from config, `empty` starts with unassigned tiles
 - `deinterlace`: `yadif`
 - `networkCachingMs`: `1000`
 - `audioOnlyFocusedTile`: `true`

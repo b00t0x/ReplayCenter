@@ -14,6 +14,7 @@
     "columns": 1,
     "rows": 1
   },
+  "startupStreams": "configured",
   "streams": [
     {
       "title": "Example MPEG2 raw TS",

@@ -13,6 +13,7 @@ struct AppConfig: Decodable {
     var startMuted: Bool?
     var audioMode: AudioMode?
     var tileLayout: TileLayoutConfig?
+    var startupStreams: StartupStreamsMode?
     var streams: [StreamConfig]
 
     static let empty = AppConfig(
@@ -28,6 +29,7 @@ struct AppConfig: Decodable {
         startMuted: true,
         audioMode: .stereo,
         tileLayout: nil,
+        startupStreams: .configured,
         streams: []
     )
 
@@ -48,10 +50,16 @@ struct AppConfig: Decodable {
             "startMuted=\(startMuted.map(String.init) ?? "<nil>")",
             "audioMode=\(audioMode?.rawValue ?? "<nil>")",
             "tileLayout=\(tileLayout?.summary ?? "<auto>")",
+            "startupStreams=\(startupStreams?.rawValue ?? "<nil>")",
             "vlcArguments=\(vlcArguments ?? [])",
             "mediaOptions=\(mediaOptions ?? [])"
         ].joined(separator: " ")
     }
+}
+
+enum StartupStreamsMode: String, Codable, Hashable {
+    case configured
+    case empty
 }
 
 struct TileLayoutConfig: Codable, Equatable {

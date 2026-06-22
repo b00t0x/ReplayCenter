@@ -17,13 +17,14 @@ final class TileGridModel {
     init(config: AppConfig, instance: VLCInstance, restoredLayout: TileLayoutConfig? = nil) {
         self.config = config
         self.instance = instance
-        let initialLayout = (restoredLayout ?? config.tileLayout ?? .automatic(tileCount: max(config.streams.count, 1)))
+        let initialStreams = config.startupStreams == .empty ? [] : config.streams
+        let initialLayout = (restoredLayout ?? config.tileLayout ?? .automatic(tileCount: max(initialStreams.count, 1)))
             .validOrFallback
-            .fitting(streamCount: config.streams.count)
+            .fitting(streamCount: initialStreams.count)
         self.layout = initialLayout
         self.tiles = (0..<initialLayout.tileCount).map { index in
             TileModel(
-                stream: config.streams.indices.contains(index) ? config.streams[index] : nil,
+                stream: initialStreams.indices.contains(index) ? initialStreams[index] : nil,
                 config: config,
                 instance: instance
             )
