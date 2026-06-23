@@ -57,16 +57,53 @@ struct AppConfig: Decodable {
     }
 }
 
+struct AppSettings: Codable, Equatable {
+    var startupStreams: StartupStreamsMode?
+
+    static let empty = AppSettings(startupStreams: nil)
+
+    static func defaults(from config: AppConfig) -> AppSettings {
+        AppSettings(startupStreams: config.startupStreams ?? .configured)
+    }
+
+    func fillingDefaults(from config: AppConfig) -> AppSettings {
+        AppSettings(startupStreams: startupStreams ?? config.startupStreams ?? .configured)
+    }
+
+    var summary: String {
+        "startupStreams=\(startupStreams?.rawValue ?? "<nil>")"
+    }
+}
+
+extension AppConfig {
+    func applying(_ settings: AppSettings?) -> AppConfig {
+        guard let settings else { return self }
+        var config = self
+        if let startupStreams = settings.startupStreams {
+            config.startupStreams = startupStreams
+        }
+        return config
+    }
+}
+
 enum StartupStreamsMode: String, Codable, Hashable {
     case configured
     case empty
 }
 
-struct TileLayoutConfig: Codable, Equatable {
+struct TileLayoutConfig: Codable, Equatable, Hashable {
     let columns: Int
     let rows: Int
 
     static let fallback = TileLayoutConfig(columns: 1, rows: 1)
+    static let presets = [
+        TileLayoutConfig(columns: 1, rows: 1),
+        TileLayoutConfig(columns: 2, rows: 1),
+        TileLayoutConfig(columns: 2, rows: 2),
+        TileLayoutConfig(columns: 3, rows: 2),
+        TileLayoutConfig(columns: 2, rows: 3),
+        TileLayoutConfig(columns: 3, rows: 3)
+    ]
 
     var validOrFallback: TileLayoutConfig {
         guard columns > 0, rows > 0 else { return .fallback }

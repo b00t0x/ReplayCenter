@@ -29,6 +29,13 @@ struct ContentView: View {
                 }
             }
         }
+        .overlay {
+            if model.isSettingsPresented {
+                SettingsView(model: model) {
+                    model.dismissSettings()
+                }
+            }
+        }
         .focusable()
         .onKeyPress { keyPress in
             handleKeyPress(keyPress)
@@ -80,7 +87,7 @@ struct ContentView: View {
     }
 
     private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
-        guard !isChannelSelectorPresented else { return .ignored }
+        guard !isChannelSelectorPresented, !model.isSettingsPresented else { return .ignored }
         guard model.tiles.indices.contains(model.focusedIndex) else { return .ignored }
 
         if keyPress.key == .delete || keyPress.key == .deleteForward {
@@ -106,6 +113,9 @@ struct ContentView: View {
             return .handled
         case "c":
             openChannelSelector()
+            return .handled
+        case ",":
+            model.presentSettings()
             return .handled
         case "+", "=":
             model.increaseTileCapacity()

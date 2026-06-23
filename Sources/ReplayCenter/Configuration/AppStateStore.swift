@@ -2,6 +2,18 @@ import Foundation
 
 struct AppState: Codable, Equatable {
     var tileLayout: TileLayoutConfig
+    var settings: AppSettings
+
+    init(tileLayout: TileLayoutConfig, settings: AppSettings = .empty) {
+        self.tileLayout = tileLayout
+        self.settings = settings
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tileLayout = try container.decode(TileLayoutConfig.self, forKey: .tileLayout)
+        settings = try container.decodeIfPresent(AppSettings.self, forKey: .settings) ?? .empty
+    }
 }
 
 struct AppStateStore {

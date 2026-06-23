@@ -8,17 +8,22 @@ final class TileGridModel {
     var focusedIndex = 0
     var tiles: [TileModel]
     var layout: TileLayoutConfig
+    var settings: AppSettings
+    var isSettingsPresented = false
     @ObservationIgnored var onLayoutChanged: ((TileLayoutConfig) -> Void)?
-    private let config: AppConfig
+    @ObservationIgnored var onSettingsChanged: ((AppSettings) -> Void)?
+    private var config: AppConfig
     private let instance: VLCInstance
     private let audioOnlyFocusedTile: Bool
     private let epgStationClient: EPGStationClient?
 
-    init(config: AppConfig, instance: VLCInstance, restoredLayout: TileLayoutConfig? = nil) {
+    init(config: AppConfig, instance: VLCInstance, restoredState: AppState? = nil) {
         self.config = config
         self.instance = instance
-        let initialStreams = config.startupStreams == .empty ? [] : config.streams
-        let initialLayout = (restoredLayout ?? config.tileLayout ?? .automatic(tileCount: max(initialStreams.count, 1)))
+        let initialSettings = (restoredState?.settings ?? .empty).fillingDefaults(from: config)
+        self.settings = initialSettings
+        let initialStreams = initialSettings.startupStreams == .empty ? [] : config.streams
+        let initialLayout = (restoredState?.tileLayout ?? config.tileLayout ?? .automatic(tileCount: max(initialStreams.count, 1)))
             .validOrFallback
             .fitting(streamCount: initialStreams.count)
         self.layout = initialLayout
@@ -80,29 +85,61 @@ final class TileGridModel {
         focus(focusedIndex)
     }
 
+    func presentSettings() {
+        isSettingsPresented = true
+    }
+
+    func dismissSettings() {
+        isSettingsPresented = false
+    }
+
     func increaseTileCapacity() {
         guard let nextLayout = layout.nextLarger else { return }
-        let firstNewIndex = tiles.count
-        while tiles.count < nextLayout.tileCount {
-            tiles.append(TileModel(stream: nil, config: config, instance: instance))
-        }
-        layout = nextLayout
-        onLayoutChanged?(nextLayout)
-        focus(firstNewIndex)
+        applyTileLayout(nextLayout, focusFirstNewTile: true)
     }
 
     func decreaseTileCapacity() {
         guard let nextLayout = layout.nextSmaller else { return }
-        guard nextLayout.tileCount < tiles.count else { return }
-        guard tiles[nextLayout.tileCount...].allSatisfy({ $0.stream == nil }) else {
-            fputs("[app] cannot shrink tile layout; clear trailing tiles first\n", stderr)
-            return
+        applyTileLayout(nextLayout)
+    }
+
+    @discardableResult
+    func applySettings(_ settings: AppSettings, tileLayout: TileLayoutConfig) -> Bool {
+        guard applyTileLayout(tileLayout) else { return false }
+        self.settings = settings
+        config = config.applying(settings)
+        onSettingsChanged?(settings)
+        return true
+    }
+
+    @discardableResult
+    func applyTileLayout(_ newLayout: TileLayoutConfig, focusFirstNewTile: Bool = false) -> Bool {
+        let newLayout = newLayout.validOrFallback
+        let oldCount = tiles.count
+        let newCount = newLayout.tileCount
+        guard newCount > 0 else { return false }
+
+        if newCount < oldCount {
+            let removedTiles = tiles.suffix(oldCount - newCount)
+            guard removedTiles.allSatisfy({ $0.stream == nil }) else {
+                fputs("[app] cannot shrink tile layout; clear trailing tiles first\n", stderr)
+                return false
+            }
+            tiles.removeLast(oldCount - newCount)
+            focusedIndex = min(focusedIndex, tiles.count - 1)
+        } else if newCount > oldCount {
+            while tiles.count < newCount {
+                tiles.append(TileModel(stream: nil, config: config, instance: instance))
+            }
+            if focusFirstNewTile {
+                focusedIndex = oldCount
+            }
         }
-        tiles.removeLast(tiles.count - nextLayout.tileCount)
-        layout = nextLayout
-        focusedIndex = min(focusedIndex, tiles.count - 1)
-        onLayoutChanged?(nextLayout)
+
+        layout = newLayout
+        onLayoutChanged?(newLayout)
         focus(focusedIndex)
+        return true
     }
 
     func shutdown() async {
