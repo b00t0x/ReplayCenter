@@ -4,6 +4,8 @@ import SwiftVLC
 
 @MainActor
 final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    private static let settingsMinimumContentSize = CGSize(width: 860, height: 560)
+    private static let channelSelectorMinimumContentSize = CGSize(width: 560, height: 600)
     private let config: AppConfig
     private let configSource: String?
     private let stateStore: AppStateStore
@@ -15,6 +17,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     private var activity: NSObjectProtocol?
     private var shuttingDown = false
     private var shutdownComplete = false
+    private var overlayBaseContentSize: CGSize?
     private weak var terminationReplySender: NSApplication?
 
     init(config: AppConfig, configSource: String?, stateStore: AppStateStore) throws {
@@ -55,7 +58,16 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         self.tileGrid = tileGrid
         let channelCatalog = config.epgStationBaseURL.map { ChannelCatalogModel(client: EPGStationClient(baseURL: $0)) }
         self.channelCatalog = channelCatalog
-        let view = ContentView(model: tileGrid, channelCatalog: channelCatalog)
+        let view = ContentView(
+            model: tileGrid,
+            channelCatalog: channelCatalog,
+            onChannelSelectorPresentationChanged: { [weak self] isPresented in
+                self?.applyOverlayWindowMode(
+                    isPresented: isPresented,
+                    minimumContentSize: Self.channelSelectorMinimumContentSize
+                )
+            }
+        )
 
         let window = NSWindow(
             contentRect: NSRect(origin: NSPoint(x: 140, y: 140), size: tileGrid.layout.initialWindowSize),
@@ -68,11 +80,19 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         window.isReleasedWhenClosed = false
         applyWindowLayout(tileGrid.layout, to: window, resize: false)
         tileGrid.onLayoutChanged = { [weak self] layout in
-            self?.applyWindowLayout(layout, resize: true)
+            if self?.tileGrid?.isSettingsPresented != true {
+                self?.applyWindowLayout(layout, resize: true)
+            }
             self?.saveCurrentState(fallbackLayout: layout)
         }
         tileGrid.onSettingsChanged = { [weak self] _ in
             self?.saveCurrentState()
+        }
+        tileGrid.onSettingsPresentationChanged = { [weak self] isPresented in
+            self?.applyOverlayWindowMode(
+                isPresented: isPresented,
+                minimumContentSize: Self.settingsMinimumContentSize
+            )
         }
         window.contentView = NSHostingView(rootView: view)
         window.makeKeyAndOrderFront(nil)
@@ -199,6 +219,45 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     private func applyWindowLayout(_ layout: TileLayoutConfig, resize: Bool) {
         guard let window else { return }
         applyWindowLayout(layout, to: window, resize: resize)
+    }
+
+    private func applyOverlayWindowMode(isPresented: Bool, minimumContentSize: CGSize) {
+        guard let window, let tileGrid else { return }
+        if isPresented {
+            if overlayBaseContentSize == nil {
+                overlayBaseContentSize = window.contentLayoutRect.size
+            }
+            window.contentAspectRatio = .zero
+            window.contentMinSize = minimumContentSize
+            guard !window.styleMask.contains(.fullScreen) else { return }
+
+            let currentSize = window.contentLayoutRect.size
+            let targetSize = CGSize(
+                width: max(currentSize.width, minimumContentSize.width),
+                height: max(currentSize.height, minimumContentSize.height)
+            )
+            if targetSize != currentSize {
+                window.setContentSize(targetSize)
+            }
+        } else {
+            let restoreSize = overlayBaseContentSize
+            overlayBaseContentSize = nil
+            applyWindowLayout(tileGrid.layout, resize: false)
+            guard !window.styleMask.contains(.fullScreen) else { return }
+            if let restoreSize {
+                window.setContentSize(contentSize(restoreSize, fitting: tileGrid.layout))
+            } else {
+                applyWindowLayout(tileGrid.layout, resize: true)
+            }
+        }
+    }
+
+    private func contentSize(_ sourceSize: CGSize, fitting layout: TileLayoutConfig) -> CGSize {
+        let aspect = layout.gridAspectRatio.width / layout.gridAspectRatio.height
+        let minimumSize = layout.minimumWindowSize
+        let width = max(sourceSize.width, minimumSize.width)
+        let height = max(width / aspect, minimumSize.height)
+        return CGSize(width: max(height * aspect, minimumSize.width), height: height)
     }
 
     private func applyWindowLayout(_ layout: TileLayoutConfig, to window: NSWindow, resize: Bool) {

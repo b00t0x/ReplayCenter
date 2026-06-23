@@ -12,6 +12,7 @@ final class TileGridModel {
     var isSettingsPresented = false
     @ObservationIgnored var onLayoutChanged: ((TileLayoutConfig) -> Void)?
     @ObservationIgnored var onSettingsChanged: ((AppSettings) -> Void)?
+    @ObservationIgnored var onSettingsPresentationChanged: ((Bool) -> Void)?
     private var config: AppConfig
     private let instance: VLCInstance
     private let audioOnlyFocusedTile: Bool
@@ -86,11 +87,15 @@ final class TileGridModel {
     }
 
     func presentSettings() {
+        guard !isSettingsPresented else { return }
         isSettingsPresented = true
+        onSettingsPresentationChanged?(true)
     }
 
     func dismissSettings() {
+        guard isSettingsPresented else { return }
         isSettingsPresented = false
+        onSettingsPresentationChanged?(false)
     }
 
     func increaseTileCapacity() {
@@ -120,10 +125,8 @@ final class TileGridModel {
         guard newCount > 0 else { return false }
 
         if newCount < oldCount {
-            let removedTiles = tiles.suffix(oldCount - newCount)
-            guard removedTiles.allSatisfy({ $0.stream == nil }) else {
-                fputs("[app] cannot shrink tile layout; clear trailing tiles first\n", stderr)
-                return false
+            for tile in tiles.suffix(oldCount - newCount) {
+                tile.clear()
             }
             tiles.removeLast(oldCount - newCount)
             focusedIndex = min(focusedIndex, tiles.count - 1)

@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @Bindable var model: TileGridModel
     let channelCatalog: ChannelCatalogModel?
+    let onChannelSelectorPresentationChanged: (Bool) -> Void
     @State private var isChannelSelectorPresented = false
 
     var body: some View {
@@ -23,9 +24,9 @@ struct ContentView: View {
             if isChannelSelectorPresented, let channelCatalog {
                 ChannelSelectorView(catalog: channelCatalog) { item in
                     model.playFocusedChannel(item.channel)
-                    isChannelSelectorPresented = false
+                    closeChannelSelector()
                 } onCancel: {
-                    isChannelSelectorPresented = false
+                    closeChannelSelector()
                 }
             }
         }
@@ -130,6 +131,14 @@ struct ContentView: View {
 
     private func openChannelSelector() {
         guard channelCatalog != nil else { return }
+        guard !isChannelSelectorPresented else { return }
         isChannelSelectorPresented = true
+        onChannelSelectorPresentationChanged(true)
+    }
+
+    private func closeChannelSelector() {
+        guard isChannelSelectorPresented else { return }
+        isChannelSelectorPresented = false
+        onChannelSelectorPresentationChanged(false)
     }
 }
