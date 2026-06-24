@@ -85,20 +85,23 @@ struct ChannelSelectorView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(filteredItems) { item in
-                        Button {
-                            onSelect(item)
-                        } label: {
-                            ChannelSelectionRow(
-                                item: item,
-                                selected: selectedItemID == item.id
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .id(item.id)
-                        .onHover { isHovering in
-                            if isHovering {
-                                selectedItemID = item.id
+                    ForEach(filteredSections) { section in
+                        ChannelSelectionSectionHeader(title: section.title)
+                        ForEach(section.items) { item in
+                            Button {
+                                onSelect(item)
+                            } label: {
+                                ChannelSelectionRow(
+                                    item: item,
+                                    selected: selectedItemID == item.id
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .id(item.id)
+                            .onHover { isHovering in
+                                if isHovering {
+                                    selectedItemID = item.id
+                                }
                             }
                         }
                     }
@@ -112,15 +115,34 @@ struct ChannelSelectorView: View {
         }
     }
 
-    private var filteredItems: [ChannelSelectionItem] {
+    private var filteredSections: [ChannelSelectionSection] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let orderedItems = channelSettings.orderedItems(catalog.items)
-        guard !query.isEmpty else { return orderedItems }
-
-        return orderedItems.filter { item in
-            item.channel.name.localizedCaseInsensitiveContains(query)
-                || item.currentProgram?.name.localizedCaseInsensitiveContains(query) == true
+        let items: [ChannelSelectionItem]
+        if query.isEmpty {
+            items = orderedItems
+        } else {
+            items = orderedItems.filter { item in
+                item.channel.name.localizedCaseInsensitiveContains(query)
+                    || item.currentProgram?.name.localizedCaseInsensitiveContains(query) == true
+            }
         }
+
+        let favoriteItems = items.filter { channelSettings.containsFavorite($0.id) }
+        let regularItems = items.filter { !channelSettings.containsFavorite($0.id) }
+        let onAirItems = regularItems.filter { $0.currentProgram != nil }
+        let offAirItems = regularItems.filter { $0.currentProgram == nil }
+
+        return [
+            ChannelSelectionSection(id: "favorites", title: "お気に入り", items: favoriteItems),
+            ChannelSelectionSection(id: "on-air", title: "放送中", items: onAirItems),
+            ChannelSelectionSection(id: "off-air", title: "放送休止中", items: offAirItems)
+        ]
+        .filter { !$0.items.isEmpty }
+    }
+
+    private var filteredItems: [ChannelSelectionItem] {
+        filteredSections.flatMap(\.items)
     }
 
     private func moveSelection(by offset: Int) {
@@ -148,6 +170,28 @@ struct ChannelSelectorView: View {
         if scrollToSelection {
             scrollTargetItemID = selectedItemID
         }
+    }
+}
+
+private struct ChannelSelectionSection: Identifiable {
+    let id: String
+    let title: String
+    let items: [ChannelSelectionItem]
+}
+
+private struct ChannelSelectionSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.caption)
+            .fontWeight(.semibold)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+            .background(.regularMaterial)
     }
 }
 
