@@ -3,16 +3,26 @@ import Foundation
 struct AppState: Codable, Equatable {
     var tileLayout: TileLayoutConfig
     var settings: AppSettings
+    var channelSettings: ChannelSettings
 
-    init(tileLayout: TileLayoutConfig, settings: AppSettings = .empty) {
+    init(
+        tileLayout: TileLayoutConfig,
+        settings: AppSettings = .empty,
+        channelSettings: ChannelSettings = .empty
+    ) {
         self.tileLayout = tileLayout
         self.settings = settings
+        self.channelSettings = channelSettings
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         tileLayout = try container.decode(TileLayoutConfig.self, forKey: .tileLayout)
         settings = try container.decodeIfPresent(AppSettings.self, forKey: .settings) ?? .empty
+        channelSettings = try container.decodeIfPresent(
+            ChannelSettings.self,
+            forKey: .channelSettings
+        ) ?? .empty
     }
 }
 

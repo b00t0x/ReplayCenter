@@ -9,6 +9,7 @@ final class TileGridModel {
     var tiles: [TileModel]
     var layout: TileLayoutConfig
     var settings: AppSettings
+    var channelSettings: ChannelSettings
     var isSettingsPresented = false
     @ObservationIgnored var onLayoutChanged: ((TileLayoutConfig) -> Void)?
     @ObservationIgnored var onSettingsChanged: ((AppSettings) -> Void)?
@@ -23,6 +24,7 @@ final class TileGridModel {
         self.instance = instance
         let initialSettings = (restoredState?.settings ?? .empty).fillingDefaults(from: config)
         self.settings = initialSettings
+        self.channelSettings = (restoredState?.channelSettings ?? .empty).normalized
         let initialStreams = initialSettings.startupStreams == .empty ? [] : config.streams
         let initialLayout = (restoredState?.tileLayout ?? config.tileLayout ?? .automatic(tileCount: max(initialStreams.count, 1)))
             .validOrFallback
@@ -109,9 +111,14 @@ final class TileGridModel {
     }
 
     @discardableResult
-    func applySettings(_ settings: AppSettings, tileLayout: TileLayoutConfig) -> Bool {
+    func applySettings(
+        _ settings: AppSettings,
+        tileLayout: TileLayoutConfig,
+        channelSettings: ChannelSettings
+    ) -> Bool {
         guard applyTileLayout(tileLayout) else { return false }
         self.settings = settings
+        self.channelSettings = channelSettings.normalized
         config = config.applying(settings)
         onSettingsChanged?(settings)
         return true

@@ -22,7 +22,10 @@ struct ContentView: View {
         .background(Color.black)
         .overlay {
             if isChannelSelectorPresented, let channelCatalog {
-                ChannelSelectorView(catalog: channelCatalog) { item in
+                ChannelSelectorView(
+                    catalog: channelCatalog,
+                    channelSettings: model.channelSettings
+                ) { item in
                     model.playFocusedChannel(item.channel)
                     closeChannelSelector()
                 } onCancel: {
@@ -32,7 +35,7 @@ struct ContentView: View {
         }
         .overlay {
             if model.isSettingsPresented {
-                SettingsView(model: model) {
+                SettingsView(model: model, channelCatalog: channelCatalog) {
                     model.dismissSettings()
                 }
             }

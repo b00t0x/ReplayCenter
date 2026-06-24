@@ -205,12 +205,26 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
     private func saveCurrentState(fallbackLayout: TileLayoutConfig? = nil) {
         guard let tileGrid else { return }
-        saveState(layout: fallbackLayout ?? tileGrid.layout, settings: tileGrid.settings)
+        saveState(
+            layout: fallbackLayout ?? tileGrid.layout,
+            settings: tileGrid.settings,
+            channelSettings: tileGrid.channelSettings
+        )
     }
 
-    private func saveState(layout: TileLayoutConfig, settings: AppSettings) {
+    private func saveState(
+        layout: TileLayoutConfig,
+        settings: AppSettings,
+        channelSettings: ChannelSettings
+    ) {
         do {
-            try stateStore.save(AppState(tileLayout: layout, settings: settings))
+            try stateStore.save(
+                AppState(
+                    tileLayout: layout,
+                    settings: settings,
+                    channelSettings: channelSettings
+                )
+            )
         } catch {
             fputs("[app] state save failed target=\(stateStore.url.path) error=\(error)\n", stderr)
         }

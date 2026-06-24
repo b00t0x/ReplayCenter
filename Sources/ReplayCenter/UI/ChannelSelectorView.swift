@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChannelSelectorView: View {
     @Bindable var catalog: ChannelCatalogModel
+    let channelSettings: ChannelSettings
     let onSelect: (ChannelSelectionItem) -> Void
     let onCancel: () -> Void
     @State private var searchText = ""
@@ -113,9 +114,10 @@ struct ChannelSelectorView: View {
 
     private var filteredItems: [ChannelSelectionItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return catalog.items }
+        let orderedItems = channelSettings.orderedItems(catalog.items)
+        guard !query.isEmpty else { return orderedItems }
 
-        return catalog.items.filter { item in
+        return orderedItems.filter { item in
             item.channel.name.localizedCaseInsensitiveContains(query)
                 || item.currentProgram?.name.localizedCaseInsensitiveContains(query) == true
         }
@@ -154,21 +156,24 @@ private struct ChannelSelectionRow: View {
     let selected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(item.channel.name)
-                .font(.headline)
-                .lineLimit(1)
-
-            if let program = item.currentProgram {
-                Text("\(program.timeRangeText)  \(program.name)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.channel.name)
+                    .font(.headline)
                     .lineLimit(1)
-            } else {
-                Text("放送中番組なし")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+
+                if let program = item.currentProgram {
+                    Text("\(program.timeRangeText)  \(program.name)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text("放送中番組なし")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
+            Spacer()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)

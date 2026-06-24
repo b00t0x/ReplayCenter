@@ -2,17 +2,25 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var model: TileGridModel
+    let channelCatalog: ChannelCatalogModel?
     let onClose: () -> Void
     @State private var selectedSection: SettingsSection = .general
     @State private var startupStreams: StartupStreamsMode
     @State private var tileLayout: TileLayoutConfig
+    @State private var favoriteChannelIDs: [Int]
     @State private var errorMessage: String?
 
-    init(model: TileGridModel, onClose: @escaping () -> Void) {
+    init(
+        model: TileGridModel,
+        channelCatalog: ChannelCatalogModel?,
+        onClose: @escaping () -> Void
+    ) {
         self.model = model
+        self.channelCatalog = channelCatalog
         self.onClose = onClose
         _startupStreams = State(initialValue: model.settings.startupStreams ?? .configured)
         _tileLayout = State(initialValue: model.layout)
+        _favoriteChannelIDs = State(initialValue: model.channelSettings.favoriteChannelIDs)
     }
 
     var body: some View {
@@ -36,6 +44,9 @@ struct SettingsView: View {
         .onKeyPress(.escape) {
             onClose()
             return .handled
+        }
+        .task {
+            await channelCatalog?.loadIfNeeded()
         }
     }
 
@@ -180,8 +191,43 @@ struct SettingsView: View {
     private var channelsSection: some View {
         VStack(alignment: .leading, spacing: 18) {
             sectionTitle("チャンネル")
-            Text("未実装")
-                .foregroundStyle(.secondary)
+
+            if let channelCatalog {
+                if channelCatalog.isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else if let errorMessage = channelCatalog.errorMessage {
+                    Text(errorMessage)
+                        .foregroundStyle(.secondary)
+                } else if channelCatalog.items.isEmpty {
+                    Text("チャンネルがありません")
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(draftChannelSettings.orderedItems(channelCatalog.items)) { item in
+                            ChannelSettingsRow(
+                                item: item,
+                                isFavorite: draftChannelSettings.containsFavorite(item.id),
+                                canMoveUp: canMoveFavorite(item.id, by: -1),
+                                canMoveDown: canMoveFavorite(item.id, by: 1)
+                            ) {
+                                setFavorite(
+                                    !draftChannelSettings.containsFavorite(item.id),
+                                    channelID: item.id
+                                )
+                            } onMoveUp: {
+                                moveFavorite(channelID: item.id, by: -1)
+                            } onMoveDown: {
+                                moveFavorite(channelID: item.id, by: 1)
+                            }
+                            Divider()
+                        }
+                    }
+                }
+            } else {
+                Text("EPGStation が未設定です")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -213,11 +259,91 @@ struct SettingsView: View {
 
     private func save() {
         let settings = AppSettings(startupStreams: startupStreams)
-        guard model.applySettings(settings, tileLayout: tileLayout) else {
+        guard model.applySettings(
+            settings,
+            tileLayout: tileLayout,
+            channelSettings: draftChannelSettings
+        ) else {
             errorMessage = "保存できませんでした。"
             return
         }
         onClose()
+    }
+
+    private var draftChannelSettings: ChannelSettings {
+        ChannelSettings(favoriteChannelIDs: favoriteChannelIDs).normalized
+    }
+
+    private func setFavorite(_ isFavorite: Bool, channelID: Int) {
+        var settings = draftChannelSettings
+        settings.setFavorite(isFavorite, channelID: channelID)
+        favoriteChannelIDs = settings.favoriteChannelIDs
+    }
+
+    private func moveFavorite(channelID: Int, by offset: Int) {
+        var settings = draftChannelSettings
+        settings.moveFavorite(channelID: channelID, by: offset)
+        favoriteChannelIDs = settings.favoriteChannelIDs
+    }
+
+    private func canMoveFavorite(_ channelID: Int, by offset: Int) -> Bool {
+        let ids = draftChannelSettings.favoriteChannelIDs
+        guard let currentIndex = ids.firstIndex(of: channelID) else { return false }
+        return ids.indices.contains(currentIndex + offset)
+    }
+}
+
+private struct ChannelSettingsRow: View {
+    let item: ChannelSelectionItem
+    let isFavorite: Bool
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onToggleFavorite: () -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                onToggleFavorite()
+            } label: {
+                Image(systemName: isFavorite ? "star.fill" : "star")
+                    .foregroundStyle(isFavorite ? .yellow : .secondary)
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.channel.name)
+                    .font(.headline)
+                    .lineLimit(1)
+                if let program = item.currentProgram {
+                    Text(program.name)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                onMoveUp()
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.plain)
+            .disabled(!canMoveUp)
+
+            Button {
+                onMoveDown()
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.plain)
+            .disabled(!canMoveDown)
+        }
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
 }
 
