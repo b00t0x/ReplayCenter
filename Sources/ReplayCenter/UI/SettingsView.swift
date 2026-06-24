@@ -199,28 +199,31 @@ struct SettingsView: View {
                 } else if let errorMessage = channelCatalog.errorMessage {
                     Text(errorMessage)
                         .foregroundStyle(.secondary)
-                } else if channelCatalog.items.isEmpty {
-                    Text("チャンネルがありません")
-                        .foregroundStyle(.secondary)
                 } else {
-                    VStack(spacing: 0) {
-                        ForEach(draftChannelSettings.orderedItems(channelCatalog.items)) { item in
-                            ChannelSettingsRow(
-                                item: item,
-                                isFavorite: draftChannelSettings.containsFavorite(item.id),
-                                canMoveUp: canMoveFavorite(item.id, by: -1),
-                                canMoveDown: canMoveFavorite(item.id, by: 1)
-                            ) {
-                                setFavorite(
-                                    !draftChannelSettings.containsFavorite(item.id),
-                                    channelID: item.id
-                                )
-                            } onMoveUp: {
-                                moveFavorite(channelID: item.id, by: -1)
-                            } onMoveDown: {
-                                moveFavorite(channelID: item.id, by: 1)
+                    let rows = channelSettingsRows(for: channelCatalog.items)
+                    if rows.isEmpty {
+                        Text("チャンネルがありません")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(rows) { row in
+                                ChannelSettingsRow(
+                                    row: row,
+                                    isFavorite: draftChannelSettings.containsFavorite(row.channelID),
+                                    canMoveUp: canMoveFavorite(row.channelID, by: -1),
+                                    canMoveDown: canMoveFavorite(row.channelID, by: 1)
+                                ) {
+                                    setFavorite(
+                                        !draftChannelSettings.containsFavorite(row.channelID),
+                                        channelID: row.channelID
+                                    )
+                                } onMoveUp: {
+                                    moveFavorite(channelID: row.channelID, by: -1)
+                                } onMoveDown: {
+                                    moveFavorite(channelID: row.channelID, by: 1)
+                                }
+                                Divider()
                             }
-                            Divider()
                         }
                     }
                 }
@@ -291,10 +294,53 @@ struct SettingsView: View {
         guard let currentIndex = ids.firstIndex(of: channelID) else { return false }
         return ids.indices.contains(currentIndex + offset)
     }
+
+    private func channelSettingsRows(for items: [ChannelSelectionItem]) -> [ChannelSettingsRowModel] {
+        var itemsByID: [Int: ChannelSelectionItem] = [:]
+        for item in items where itemsByID[item.id] == nil {
+            itemsByID[item.id] = item
+        }
+
+        let favoriteIDs = draftChannelSettings.favoriteChannelIDs
+        let favoriteIDSet = Set(favoriteIDs)
+        let favoriteRows = favoriteIDs.map { channelID in
+            if let item = itemsByID[channelID] {
+                return ChannelSettingsRowModel(item: item)
+            }
+            return ChannelSettingsRowModel(missingChannelID: channelID)
+        }
+        let regularRows = items
+            .filter { !favoriteIDSet.contains($0.id) }
+            .map(ChannelSettingsRowModel.init(item:))
+        return favoriteRows + regularRows
+    }
+}
+
+private struct ChannelSettingsRowModel: Identifiable, Hashable {
+    let channelID: Int
+    let title: String
+    let detail: String?
+    let isMissing: Bool
+
+    var id: Int { channelID }
+
+    init(item: ChannelSelectionItem) {
+        self.channelID = item.id
+        self.title = item.channel.name
+        self.detail = item.currentProgram?.name
+        self.isMissing = false
+    }
+
+    init(missingChannelID channelID: Int) {
+        self.channelID = channelID
+        self.title = "不明なチャンネル"
+        self.detail = "チャンネル情報を取得できません (ID: \(channelID))"
+        self.isMissing = true
+    }
 }
 
 private struct ChannelSettingsRow: View {
-    let item: ChannelSelectionItem
+    let row: ChannelSettingsRowModel
     let isFavorite: Bool
     let canMoveUp: Bool
     let canMoveDown: Bool
@@ -313,13 +359,19 @@ private struct ChannelSettingsRow: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.channel.name)
+                HStack(spacing: 6) {
+                    if row.isMissing {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                    Text(row.title)
+                        .lineLimit(1)
+                }
                     .font(.headline)
-                    .lineLimit(1)
-                if let program = item.currentProgram {
-                    Text(program.name)
+                if let detail = row.detail {
+                    Text(detail)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(row.isMissing ? .orange : .secondary)
                         .lineLimit(1)
                 }
             }
