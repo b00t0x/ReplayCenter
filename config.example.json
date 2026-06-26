@@ -7,6 +7,11 @@
   "networkCachingMs": 1000,
   "deinterlace": "yadif",
   "mediaOptions": [],
+  "dualMonoFilter": {
+    "filterPath": null,
+    "curlPath": "/usr/bin/curl",
+    "muxSelectedToStereo": false
+  },
   "audioOnlyFocusedTile": true,
   "startMuted": true,
   "audioMode": "stereo",

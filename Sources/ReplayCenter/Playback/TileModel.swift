@@ -11,6 +11,7 @@ final class TileModel: Identifiable {
     private let config: AppConfig
     private var started = false
     private var currentAudioMode: AudioMode
+    private var dualMonoFilterPipeline: DualMonoFilterPipeline?
 
     init(stream: StreamConfig?, config: AppConfig, instance: VLCInstance) {
         self.stream = stream
@@ -38,6 +39,8 @@ final class TileModel: Identifiable {
         stream = nil
         started = false
         player.stop()
+        dualMonoFilterPipeline?.stop()
+        dualMonoFilterPipeline = nil
         player.isMuted = true
     }
 
@@ -48,9 +51,13 @@ final class TileModel: Identifiable {
     func setAudioMode(_ mode: AudioMode) {
         currentAudioMode = mode
         player.stereoMode = mode.stereoMode
+        dualMonoFilterPipeline?.setAudioMode(mode)
     }
 
     func shutdown() async {
+        player.stop()
+        dualMonoFilterPipeline?.stop()
+        dualMonoFilterPipeline = nil
         await player.shutdown()
     }
 
@@ -60,9 +67,20 @@ final class TileModel: Identifiable {
             log("invalid url=\(stream.url)")
             return
         }
+        currentAudioMode = stream.audioMode ?? config.audioMode ?? .stereo
+        player.stereoMode = currentAudioMode.stereoMode
+        player.stop()
+        dualMonoFilterPipeline?.stop()
+        dualMonoFilterPipeline = nil
 
         do {
-            let media = try Media(url: url)
+            let pipeline = DualMonoFilterPipeline(
+                streamURL: url.absoluteString,
+                label: stream.title ?? stream.url,
+                config: config.dualMonoFilter ?? .default
+            )
+            let media = try pipeline.start(initialMode: currentAudioMode)
+            dualMonoFilterPipeline = pipeline
             if let networkCachingMs = config.networkCachingMs {
                 media.addOption(":network-caching=\(networkCachingMs)")
                 media.addOption(":live-caching=\(networkCachingMs)")
@@ -76,8 +94,10 @@ final class TileModel: Identifiable {
 
             applyDeinterlaceIfNeeded()
             try player.play(media)
-            log("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel)")
+            log("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel) audioMode=\(currentAudioMode.rawValue) filter=\((config.dualMonoFilter ?? .default).summary)")
         } catch {
+            dualMonoFilterPipeline?.stop()
+            dualMonoFilterPipeline = nil
             log("play failed error=\(error)")
         }
     }

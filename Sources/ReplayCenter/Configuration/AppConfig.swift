@@ -9,6 +9,7 @@ struct AppConfig: Decodable {
     var networkCachingMs: Int?
     var deinterlace: String?
     var mediaOptions: [String]?
+    var dualMonoFilter: DualMonoFilterConfig?
     var audioOnlyFocusedTile: Bool?
     var startMuted: Bool?
     var audioMode: AudioMode?
@@ -25,6 +26,7 @@ struct AppConfig: Decodable {
         networkCachingMs: 1000,
         deinterlace: "yadif",
         mediaOptions: [],
+        dualMonoFilter: .default,
         audioOnlyFocusedTile: true,
         startMuted: true,
         audioMode: .stereo,
@@ -51,6 +53,7 @@ struct AppConfig: Decodable {
             "audioMode=\(audioMode?.rawValue ?? "<nil>")",
             "tileLayout=\(tileLayout?.summary ?? "<auto>")",
             "startupStreams=\(startupStreams?.rawValue ?? "<nil>")",
+            "dualMonoFilter=\((dualMonoFilter ?? .default).summary)",
             "vlcArguments=\(vlcArguments ?? [])",
             "mediaOptions=\(mediaOptions ?? [])"
         ].joined(separator: " ")
@@ -83,6 +86,30 @@ extension AppConfig {
             config.startupStreams = startupStreams
         }
         return config
+    }
+}
+
+struct DualMonoFilterConfig: Codable, Equatable {
+    var filterPath: String?
+    var curlPath: String?
+    var muxSelectedToStereo: Bool?
+
+    static let `default` = DualMonoFilterConfig(
+        filterPath: nil,
+        curlPath: nil,
+        muxSelectedToStereo: false
+    )
+
+    var effectiveMuxSelectedToStereo: Bool {
+        muxSelectedToStereo ?? false
+    }
+
+    var summary: String {
+        [
+            "filterPath=\(filterPath ?? "<auto>")",
+            "curlPath=\(curlPath ?? "/usr/bin/curl")",
+            "muxSelectedToStereo=\(effectiveMuxSelectedToStereo)"
+        ].joined(separator: ",")
     }
 }
 

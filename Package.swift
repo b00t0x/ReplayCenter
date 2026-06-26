@@ -7,6 +7,10 @@ let package = Package(
     platforms: [
         .macOS(.v15)
     ],
+    products: [
+        .executable(name: "ReplayCenter", targets: ["ReplayCenter"]),
+        .executable(name: "ReplayCenterDualMonoFilter", targets: ["ReplayCenterDualMonoFilter"])
+    ],
     dependencies: [
         .package(url: "https://github.com/harflabs/SwiftVLC.git", exact: "0.10.0")
     ],
@@ -19,6 +23,19 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI")
+            ]
+        ),
+        .executableTarget(
+            name: "ReplayCenterDualMonoFilter",
+            path: "Sources/ReplayCenterDualMonoFilter",
+            sources: [
+                "filter.cpp",
+                "third_party/tsreadex/aac.cpp",
+                "third_party/tsreadex/huffman.cpp",
+                "third_party/tsreadex/util.cpp"
+            ],
+            cxxSettings: [
+                .unsafeFlags(["-std=c++17", "-DNDEBUG"])
             ]
         )
     ]

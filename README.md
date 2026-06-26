@@ -2,10 +2,13 @@
 
 ReplayCenter is a desktop-oriented live TV viewing application for EPGStation.
 
-The first implementation target is a macOS app using SwiftVLC. The current
-vertical slice can load a JSON config, display live streams as tiles, play audio
-only from the focused tile, and switch dual-mono audio with `S` / `L` / `R`.
-It also contains the first EPGStation API client layer for channel selection.
+The first implementation target is a macOS app using SwiftVLC. Live streams are
+fed through the bundled TS dual-mono filter helper before reaching SwiftVLC, so
+the same playback path is used for normal stereo and dual-mono programs. The
+current vertical slice can load a JSON config, display live streams as tiles,
+play audio only from the focused tile, and switch dual-mono audio with
+`S` / `L` / `R`. It also contains the first EPGStation API client layer for
+channel selection.
 
 Current provisional keyboard and mouse controls for development:
 
@@ -26,6 +29,7 @@ Current provisional keyboard and mouse controls for development:
 ```bash
 cp config.example.json config.local.json
 vi config.local.json
+swift build --product ReplayCenterDualMonoFilter
 swift run ReplayCenter --config config.local.json
 ```
 
@@ -45,6 +49,28 @@ Important defaults:
 - `deinterlace`: `yadif`
 - `networkCachingMs`: `1000`
 - `audioOnlyFocusedTile`: `true`
+- `dualMonoFilter`: helper process settings. `muxSelectedToStereo` defaults to
+  `false`, which is the current stable setting from the PoC validation.
+
+`filterPath` can usually stay unset. During development ReplayCenter looks for a
+`ReplayCenterDualMonoFilter` executable next to the app binary or in
+`.build/debug` / `.build/release`. Set `REPLAYCENTER_TS_FILTER_PATH` or
+`dualMonoFilter.filterPath` when using a custom helper path.
+
+The current implementation uses `/usr/bin/curl` to read the EPGStation live TS
+stream and pipe it into the helper. This is a development bridge; the intended
+longer-term implementation is to read the stream inside ReplayCenter and write
+to the helper stdin directly.
+
+Initial local validation of the filter-only playback path:
+
+- `S` / `L` / `R` switching works.
+- Ordinary stereo programs also play without immediately visible AV drift.
+- 9 simultaneous streams appear stable in the current development environment.
+- All filter helper processes together stayed within roughly 1% CPU usage.
+- App CPU usage stayed around the previous SwiftVLC baseline.
+- Stopping playback or clearing tiles also removed the corresponding helper
+  processes, so no lingering helpers were observed.
 
 Runtime state, such as the last tile layout, is saved outside the config file in
 the user's Application Support directory. Set `REPLAYCENTER_STATE_PATH` during
