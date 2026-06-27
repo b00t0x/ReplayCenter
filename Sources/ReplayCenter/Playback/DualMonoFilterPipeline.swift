@@ -3,6 +3,7 @@ import Foundation
 import SwiftVLC
 
 enum DualMonoFilterPipelineEvent: Sendable {
+    case audioStateChanged(AudioStreamState)
     case curlExited(status: Int32, reason: Int, stderr: String?)
     case filterExited(status: Int32, reason: Int)
 }
@@ -17,6 +18,8 @@ final class DualMonoFilterPipeline {
     private var filterProcess: Process?
     private var filterInputPipe: Pipe?
     private var filterOutputPipe: Pipe?
+    private var filterErrorPipe: Pipe?
+    private var filterStatusReader: FilterStatusReader?
     private var duplicatedOutputFD: Int32 = -1
 
     init(
@@ -49,7 +52,9 @@ final class DualMonoFilterPipeline {
         ]
         filterProcess.standardInput = inputPipe
         filterProcess.standardOutput = outputPipe
-        filterProcess.standardError = FileHandle.standardError
+        let filterErrorPipe = Pipe()
+        let filterStatusReader = FilterStatusReader(label: label, onEvent: onEvent)
+        filterProcess.standardError = filterErrorPipe
         let onEvent = onEvent
         filterProcess.terminationHandler = { [label, onEvent] process in
             fputs(
@@ -109,9 +114,12 @@ final class DualMonoFilterPipeline {
 
         self.filterProcess = filterProcess
         self.curlProcess = curlProcess
+        self.filterErrorPipe = filterErrorPipe
+        self.filterStatusReader = filterStatusReader
 
         do {
             try filterProcess.run()
+            filterStatusReader.start(reading: filterErrorPipe.fileHandleForReading)
             try curlProcess.run()
         } catch {
             stop()
@@ -139,6 +147,11 @@ final class DualMonoFilterPipeline {
         terminate(filterProcess)
         curlProcess = nil
         filterProcess = nil
+
+        filterStatusReader?.stop()
+        filterStatusReader = nil
+        filterErrorPipe?.fileHandleForReading.closeFile()
+        filterErrorPipe = nil
 
         filterInputPipe?.fileHandleForWriting.closeFile()
         filterInputPipe?.fileHandleForReading.closeFile()
@@ -201,6 +214,69 @@ private func absolutePath(_ path: String) -> String {
         .appendingPathComponent(expanded)
         .standardized
         .path
+}
+
+private final class FilterStatusReader: @unchecked Sendable {
+    private let label: String
+    private let onEvent: @Sendable (DualMonoFilterPipelineEvent) -> Void
+    private let lock = NSLock()
+    private var buffer = Data()
+    private weak var fileHandle: FileHandle?
+
+    init(label: String, onEvent: @escaping @Sendable (DualMonoFilterPipelineEvent) -> Void) {
+        self.label = label
+        self.onEvent = onEvent
+    }
+
+    func start(reading fileHandle: FileHandle) {
+        self.fileHandle = fileHandle
+        fileHandle.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            FileHandle.standardError.write(data)
+            self?.consume(data)
+        }
+    }
+
+    func stop() {
+        fileHandle?.readabilityHandler = nil
+        fileHandle = nil
+    }
+
+    private func consume(_ data: Data) {
+        lock.lock()
+        buffer.append(data)
+
+        while let newlineIndex = buffer.firstIndex(of: 0x0a) {
+            let lineData = buffer[..<newlineIndex]
+            buffer.removeSubrange(...newlineIndex)
+            parseLine(String(decoding: lineData, as: UTF8.self))
+        }
+
+        lock.unlock()
+    }
+
+    private func parseLine(_ line: String) {
+        let prefix = "[filter-status] "
+        guard line.hasPrefix(prefix) else { return }
+
+        let fields = line
+            .dropFirst(prefix.count)
+            .split(separator: " ")
+            .reduce(into: [String: String]()) { result, field in
+                let parts = field.split(separator: "=", maxSplits: 1)
+                guard parts.count == 2 else { return }
+                result[String(parts[0])] = String(parts[1])
+            }
+
+        guard let rawState = fields["audioState"],
+              let state = AudioStreamState(rawValue: rawState) else {
+            fputs("[\(label)] ignored filter status line: \(line)\n", stderr)
+            return
+        }
+
+        onEvent(.audioStateChanged(state))
+    }
 }
 
 private extension AudioMode {

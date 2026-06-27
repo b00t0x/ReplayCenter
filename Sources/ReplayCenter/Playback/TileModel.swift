@@ -8,6 +8,7 @@ final class TileModel: Identifiable {
     let id = UUID()
     private(set) var stream: StreamConfig?
     private(set) var playbackState: TilePlaybackState
+    private(set) var audioStreamState: AudioStreamState
     private(set) var currentAudioMode: AudioMode
     private(set) var isMuted: Bool
     let player: Player
@@ -21,6 +22,7 @@ final class TileModel: Identifiable {
         self.config = config
         self.player = Player(instance: instance)
         playbackState = .idle
+        audioStreamState = .unknown
         currentAudioMode = stream?.audioMode ?? config.audioMode ?? .stereo
         isMuted = stream?.muted ?? config.startMuted ?? true
         player.isMuted = isMuted
@@ -44,6 +46,7 @@ final class TileModel: Identifiable {
         stream = nil
         started = false
         playbackState = .idle
+        audioStreamState = .unknown
         activePipelineID = nil
         player.stop()
         dualMonoFilterPipeline?.stop()
@@ -57,6 +60,7 @@ final class TileModel: Identifiable {
     }
 
     func setAudioMode(_ mode: AudioMode) {
+        guard audioStreamState.supportsCurrentAudioModeControls else { return }
         currentAudioMode = mode
         player.stereoMode = mode.stereoMode
         dualMonoFilterPipeline?.setAudioMode(mode)
@@ -70,6 +74,7 @@ final class TileModel: Identifiable {
 
     func shutdown() async {
         playbackState = .idle
+        audioStreamState = .unknown
         activePipelineID = nil
         player.stop()
         dualMonoFilterPipeline?.stop()
@@ -87,6 +92,7 @@ final class TileModel: Identifiable {
         currentAudioMode = stream.audioMode ?? config.audioMode ?? .stereo
         player.stereoMode = currentAudioMode.stereoMode
         playbackState = .starting
+        audioStreamState = .unknown
         activePipelineID = nil
         player.stop()
         dualMonoFilterPipeline?.stop()
@@ -134,6 +140,10 @@ final class TileModel: Identifiable {
         guard activePipelineID == pipelineID else { return }
 
         switch event {
+        case let .audioStateChanged(state):
+            guard audioStreamState != state else { return }
+            audioStreamState = state
+            log("audio state changed state=\(state.rawValue)")
         case let .curlExited(status, reason, stderr):
             let detail = "curl exited status=\(status) reason=\(reason)"
             if let stderr {

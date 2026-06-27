@@ -148,19 +148,57 @@ bool parsePat(const uint8_t *payload, int size, int *pmtPid)
     return false;
 }
 
-bool parsePmt(const uint8_t *payload, int size, int *audioPid)
+bool appendPsiSection(
+    const uint8_t *packet,
+    int offset,
+    std::vector<uint8_t> *section,
+    size_t *expectedSize
+)
 {
-    if (size <= 0) {
+    if (offset < 0 || offset >= TS_PACKET_SIZE) {
         return false;
     }
 
-    int pointer = payload[0];
-    if (pointer + 12 >= size) {
+    const uint8_t *payload = packet + offset;
+    size_t payloadSize = TS_PACKET_SIZE - static_cast<size_t>(offset);
+
+    if (payloadUnitStart(packet)) {
+        if (payloadSize == 0) {
+            return false;
+        }
+
+        int pointer = payload[0];
+        if (1 + pointer >= static_cast<int>(payloadSize)) {
+            section->clear();
+            *expectedSize = 0;
+            return false;
+        }
+
+        payload += 1 + pointer;
+        payloadSize -= 1 + pointer;
+        section->clear();
+        *expectedSize = 0;
+    } else if (section->empty()) {
         return false;
     }
 
-    const uint8_t *section = payload + 1 + pointer;
-    int sectionSize = size - 1 - pointer;
+    section->insert(section->end(), payload, payload + payloadSize);
+
+    if (*expectedSize == 0 && section->size() >= 3) {
+        int sectionLength = (((*section)[1] & 0x0f) << 8) | (*section)[2];
+        if (sectionLength < 4 || sectionLength > 1021) {
+            section->clear();
+            return false;
+        }
+        *expectedSize = 3 + static_cast<size_t>(sectionLength);
+    }
+
+    return *expectedSize > 0 && section->size() >= *expectedSize;
+}
+
+bool parsePmtSection(const uint8_t *section, int sectionSize, std::vector<int> *audioPids)
+{
+    audioPids->clear();
     if (sectionSize < 12 || section[0] != 0x02) {
         return false;
     }
@@ -178,12 +216,11 @@ bool parsePmt(const uint8_t *payload, int size, int *audioPid)
         int elementaryPid = ((section[offset + 1] & 0x1f) << 8) | section[offset + 2];
         int esInfoLength = ((section[offset + 3] & 0x0f) << 8) | section[offset + 4];
         if (streamType == STREAM_TYPE_AAC_ADTS) {
-            *audioPid = elementaryPid;
-            return true;
+            audioPids->push_back(elementaryPid);
         }
         offset += 5 + esInfoLength;
     }
-    return false;
+    return !audioPids->empty();
 }
 
 void writeAll(FILE *out, const uint8_t *data, size_t size)
@@ -288,7 +325,7 @@ std::vector<uint8_t> transformPes(
 )
 {
     *converted = false;
-    if (mode == AudioMode::Stereo || pes.size() < 9) {
+    if (pes.size() < 9) {
         return pes;
     }
 
@@ -325,6 +362,13 @@ std::vector<uint8_t> transformPes(
         pes.data() + aacOffset,
         pesSize - aacOffset
     );
+
+    if (mode == AudioMode::Stereo) {
+        if (!isDualMono) {
+            aacWorkspace.clear();
+        }
+        return pes;
+    }
 
     const std::vector<uint8_t> &selected = mode == AudioMode::Left ? left : right;
     if (!isDualMono || selected.empty()) {
@@ -398,6 +442,7 @@ class Filter {
 public:
     explicit Filter(int forcedAudioPid, bool muxSelectedToStereo)
         : audioPid_(forcedAudioPid)
+        , forcedAudioPid_(forcedAudioPid >= 0)
         , muxSelectedToStereo_(muxSelectedToStereo)
         , lastMode_(currentMode())
     {
@@ -412,13 +457,27 @@ public:
             int pmtPid = -1;
             if (parsePat(packet + offset, TS_PACKET_SIZE - offset, &pmtPid) && pmtPid_ != pmtPid) {
                 pmtPid_ = pmtPid;
+                pmtSection_.clear();
+                pmtSectionExpectedSize_ = 0;
                 std::fprintf(stderr, "[filter] pmt pid=0x%x\n", pmtPid_);
             }
-        } else if (pid == pmtPid_ && offset >= 0 && audioPid_ < 0) {
-            int audioPid = -1;
-            if (parsePmt(packet + offset, TS_PACKET_SIZE - offset, &audioPid)) {
-                audioPid_ = audioPid;
-                std::fprintf(stderr, "[filter] audio pid=0x%x\n", audioPid_);
+        } else if (pid == pmtPid_ && offset >= 0) {
+            std::vector<int> audioPids;
+            if (appendPsiSection(packet, offset, &pmtSection_, &pmtSectionExpectedSize_)
+                && parsePmtSection(
+                    pmtSection_.data(),
+                    static_cast<int>(pmtSectionExpectedSize_),
+                    &audioPids
+                )
+                && audioPids_ != audioPids) {
+                audioPids_ = audioPids;
+                if (!forcedAudioPid_) {
+                    audioPid_ = audioPids_[0];
+                }
+                aacWorkspace_.clear();
+                isDualMono_ = false;
+                std::fprintf(stderr, "[filter] audio pids=%s selected=0x%x\n", audioPidsLabel().c_str(), audioPid_);
+                emitAudioStatus();
             }
         }
 
@@ -486,6 +545,7 @@ private:
             &converted
         );
         logTransform(converted, currentPes_, transformed, mode);
+        emitAudioStatus();
         audioWriter_.writePes(out, audioPid_, transformed);
         currentPes_.clear();
     }
@@ -546,8 +606,61 @@ private:
         }
     }
 
+    void emitAudioStatus()
+    {
+        std::string state = audioStateLabel();
+        if (state == lastAudioState_ && audioPids_ == lastStatusAudioPids_) {
+            return;
+        }
+
+        lastAudioState_ = state;
+        lastStatusAudioPids_ = audioPids_;
+        std::fprintf(
+            stderr,
+            "[filter-status] audioState=%s audioPids=%s selectedAudioPid=0x%x\n",
+            state.c_str(),
+            audioPidsLabel().c_str(),
+            audioPid_
+        );
+    }
+
+    std::string audioStateLabel() const
+    {
+        if (audioPids_.size() >= 2) {
+            return "multiStream";
+        }
+        if (audioPids_.empty()) {
+            return "unknown";
+        }
+        return isDualMono_ ? "dualMono" : "stereoSingle";
+    }
+
+    std::string audioPidsLabel() const
+    {
+        if (audioPids_.empty()) {
+            return "-";
+        }
+
+        std::string label;
+        char buffer[16];
+        for (size_t index = 0; index < audioPids_.size(); ++index) {
+            if (index > 0) {
+                label += ",";
+            }
+            std::snprintf(buffer, sizeof(buffer), "0x%x", audioPids_[index]);
+            label += buffer;
+        }
+        return label;
+    }
+
     int pmtPid_ = -1;
     int audioPid_ = -1;
+    bool forcedAudioPid_ = false;
+    std::vector<uint8_t> pmtSection_;
+    size_t pmtSectionExpectedSize_ = 0;
+    std::vector<int> audioPids_;
+    std::vector<int> lastStatusAudioPids_;
+    std::string lastAudioState_;
     bool muxSelectedToStereo_ = true;
     std::vector<uint8_t> currentPes_;
     std::vector<uint8_t> aacWorkspace_;

@@ -48,6 +48,7 @@ struct TileView: View {
                     FocusedTileControlsView(
                         hasStream: model.stream != nil,
                         audioMode: model.currentAudioMode,
+                        audioStreamState: model.audioStreamState,
                         isMuted: model.isMuted
                     ) {
                         onFocus()

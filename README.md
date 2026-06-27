@@ -108,6 +108,11 @@ The pipeline logs helper exits with the tile label. If playback fails, check the
 terminal output for `curl exited`, `dual mono filter exited`, or
 `playback failed`.
 
+The focused tile controls currently show audio stream detection state for
+development validation. Treat this as temporary diagnostics. In a polished UI,
+stream details should move to a separate optional display such as a "show stream
+information" setting, rather than living in the main operation controls.
+
 Current development TODOs:
 
 - Replace the `/usr/bin/curl` bridge with app-internal stream reading.

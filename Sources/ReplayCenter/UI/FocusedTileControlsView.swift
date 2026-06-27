@@ -3,6 +3,7 @@ import SwiftUI
 struct FocusedTileControlsView: View {
     let hasStream: Bool
     let audioMode: AudioMode
+    let audioStreamState: AudioStreamState
     let isMuted: Bool
     let onChangeChannel: () -> Void
     let onSetAudioMode: (AudioMode) -> Void
@@ -17,6 +18,10 @@ struct FocusedTileControlsView: View {
 
             Divider()
                 .frame(height: 18)
+
+            Text(audioStreamState.displayText)
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 54, alignment: .leading)
 
             audioButton(title: "S", mode: .stereo)
                 .help("ステレオ")
@@ -61,7 +66,7 @@ struct FocusedTileControlsView: View {
                 .background(audioMode == mode ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.12))
         }
         .buttonStyle(.plain)
-        .disabled(!hasStream)
+        .disabled(!hasStream || !audioStreamState.supportsCurrentAudioModeControls)
     }
 
     private func controlButton(title: String?, systemImage: String, action: @escaping () -> Void) -> some View {
