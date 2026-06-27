@@ -663,7 +663,7 @@ private struct TileLayoutPreview: View {
     }
 
     private func tileColor(for placement: TilePlacement) -> Color {
-        if placement.width > 1 || placement.height > 1 {
+        if layout.tileCount == 1 || placement.width > 1 || placement.height > 1 {
             return Color.accentColor.opacity(0.72)
         }
         return Color.white.opacity(0.3)

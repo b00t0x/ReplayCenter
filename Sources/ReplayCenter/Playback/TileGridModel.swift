@@ -206,7 +206,8 @@ final class TileGridModel {
     }
 
     private func playbackProfile(for tileIndex: Int) -> TilePlaybackProfile {
-        let isLargeTile = layout.placement(at: tileIndex)?.spansMultipleCells ?? false
+        let isLargeTile = layout.tileCount == 1
+            || layout.placement(at: tileIndex)?.spansMultipleCells == true
         let fallback = config.defaultPlaybackProfile
         if isLargeTile {
             return settings.largeTilePlayback ?? config.largeTilePlayback ?? fallback

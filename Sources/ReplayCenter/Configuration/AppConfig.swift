@@ -242,7 +242,6 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
 
     static let fallback = TileLayoutConfig(columns: 1, rows: 1)
     static let standardPresets = [
-        TileLayoutConfig(columns: 1, rows: 1),
         TileLayoutConfig(columns: 2, rows: 1),
         TileLayoutConfig(columns: 2, rows: 2),
         TileLayoutConfig(columns: 3, rows: 2),
@@ -258,6 +257,7 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
         TileLayoutConfig(columns: 2, rows: 4)
     ]
     static let largePresets = [
+        TileLayoutConfig(columns: 1, rows: 1),
         TileLayoutConfig.large(
             columns: 3,
             rows: 2,
