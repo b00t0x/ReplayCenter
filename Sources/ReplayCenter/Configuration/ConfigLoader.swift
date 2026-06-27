@@ -13,11 +13,6 @@ enum ConfigLoader {
             return LoadedConfig(config: try loadFile(at: explicitPath), source: explicitPath)
         }
 
-        let localPath = "config.local.json"
-        if FileManager.default.fileExists(atPath: localPath) {
-            return LoadedConfig(config: try loadFile(at: localPath), source: localPath)
-        }
-
         return LoadedConfig(config: .empty, source: nil)
     }
 

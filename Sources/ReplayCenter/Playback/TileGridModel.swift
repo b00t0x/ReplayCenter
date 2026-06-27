@@ -11,6 +11,7 @@ final class TileGridModel {
     var settings: AppSettings
     var channelSettings: ChannelSettings
     var playbackModeOptions: [EPGStationLiveStreamModeOption]
+    var channelCatalog: ChannelCatalogModel?
     var volumePercent: Int
     var isSettingsPresented = false
     @ObservationIgnored var onLayoutChanged: ((TileLayoutConfig) -> Void)?
@@ -19,7 +20,7 @@ final class TileGridModel {
     private var config: AppConfig
     private let instance: VLCInstance
     private let audioOnlyFocusedTile: Bool
-    private let epgStationClient: EPGStationClient?
+    private var epgStationClient: EPGStationClient?
 
     init(config: AppConfig, instance: VLCInstance, restoredState: AppState? = nil) {
         self.config = config
@@ -35,7 +36,7 @@ final class TileGridModel {
         var config = config
         config.volumePercent = initialVolumePercent
         self.config = config
-        let initialStreams = initialSettings.startupStreams == .empty ? [] : config.streams
+        let initialStreams = config.startupStreams == .empty ? [] : config.streams
         let initialLayout = (restoredState?.tileLayout ?? config.tileLayout ?? .automatic(tileCount: max(initialStreams.count, 1)))
             .validOrFallback
             .fitting(streamCount: initialStreams.count)
@@ -48,7 +49,14 @@ final class TileGridModel {
             )
         }
         self.audioOnlyFocusedTile = config.audioOnlyFocusedTile ?? true
-        self.epgStationClient = config.epgStationBaseURL.map { EPGStationClient(baseURL: $0) }
+        if let epgStationBaseURL = config.epgStationBaseURL {
+            let client = EPGStationClient(baseURL: epgStationBaseURL)
+            self.epgStationClient = client
+            self.channelCatalog = ChannelCatalogModel(client: client)
+        } else {
+            self.epgStationClient = nil
+            self.channelCatalog = nil
+        }
     }
 
     func focusInitialTileIfNeeded() {
@@ -291,9 +299,11 @@ final class TileGridModel {
             ?? self.settings.smallTilePlayback
             ?? config.smallTilePlayback
             ?? config.defaultPlaybackProfile
+        let previousBaseURL = config.epgStationBaseURL
         self.settings = settings
         self.channelSettings = channelSettings.normalized
         config = config.applying(settings)
+        updateEPGStationClientIfNeeded(previousBaseURL: previousBaseURL)
         volumePercent = normalizedVolume
         for tile in tiles {
             tile.setVolumePercent(normalizedVolume)
@@ -302,6 +312,20 @@ final class TileGridModel {
         focus(focusedIndex)
         onSettingsChanged?(settings)
         return true
+    }
+
+    private func updateEPGStationClientIfNeeded(previousBaseURL: URL?) {
+        guard config.epgStationBaseURL != previousBaseURL else { return }
+        guard let epgStationBaseURL = config.epgStationBaseURL else {
+            epgStationClient = nil
+            channelCatalog = nil
+            playbackModeOptions = [.fallback(mode: config.liveStreamMode ?? 0)]
+            return
+        }
+        let client = EPGStationClient(baseURL: epgStationBaseURL)
+        epgStationClient = client
+        channelCatalog = ChannelCatalogModel(client: client)
+        playbackModeOptions = [.fallback(mode: config.liveStreamMode ?? 0)]
     }
 
     private enum PlaybackProfileRestartPolicy {

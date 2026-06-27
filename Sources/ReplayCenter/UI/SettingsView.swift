@@ -2,10 +2,9 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var model: TileGridModel
-    let channelCatalog: ChannelCatalogModel?
     let onClose: () -> Void
     @State private var selectedSection: SettingsSection = .general
-    @State private var startupStreams: StartupStreamsMode
+    @State private var epgStationBaseURLText: String
     @State private var volumePercent: Int
     @State private var largeTilePlayback: TilePlaybackProfile
     @State private var smallTilePlayback: TilePlaybackProfile
@@ -17,13 +16,13 @@ struct SettingsView: View {
 
     init(
         model: TileGridModel,
-        channelCatalog: ChannelCatalogModel?,
         onClose: @escaping () -> Void
     ) {
         self.model = model
-        self.channelCatalog = channelCatalog
         self.onClose = onClose
-        _startupStreams = State(initialValue: model.settings.startupStreams ?? .configured)
+        _epgStationBaseURLText = State(
+            initialValue: model.settings.epgStationBaseURL?.absoluteString ?? ""
+        )
         _volumePercent = State(initialValue: VolumeLevel.normalized(model.settings.volumePercent))
         _largeTilePlayback = State(
             initialValue: model.settings.largeTilePlayback ?? TilePlaybackProfile.fallback
@@ -62,7 +61,7 @@ struct SettingsView: View {
             return .handled
         }
         .task {
-            await channelCatalog?.loadIfNeeded()
+            await model.channelCatalog?.loadIfNeeded()
             updatePlaybackModeOptionsFromCatalog()
         }
     }
@@ -164,16 +163,12 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             sectionTitle("一般")
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("起動時ストリーム")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("EPGStation")
                     .font(.headline)
-                Picker("起動時ストリーム", selection: $startupStreams) {
-                    Text("設定ファイル").tag(StartupStreamsMode.configured)
-                    Text("空").tag(StartupStreamsMode.empty)
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 360)
+                TextField("https://epgstation.example.local/", text: $epgStationBaseURLText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 520)
             }
         }
     }
@@ -214,7 +209,7 @@ struct SettingsView: View {
                     )
                 }
 
-                if let configErrorMessage = channelCatalog?.configErrorMessage {
+                if let configErrorMessage = model.channelCatalog?.configErrorMessage {
                     Text("EPGStation 設定を取得できません: \(configErrorMessage)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -263,7 +258,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             sectionTitle("チャンネル")
 
-            if let channelCatalog {
+            if let channelCatalog = model.channelCatalog {
                 if channelCatalog.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -333,8 +328,12 @@ struct SettingsView: View {
 
     private func save() {
         updatePlaybackModeOptionsFromCatalog()
+        let epgStationBaseURL = normalizedEPGStationBaseURL()
+        if errorMessage != nil {
+            return
+        }
         let settings = AppSettings(
-            startupStreams: startupStreams,
+            epgStationBaseURL: epgStationBaseURL,
             volumePercent: VolumeLevel.normalized(volumePercent),
             keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile,
             largeTilePlayback: largeTilePlayback,
@@ -352,7 +351,7 @@ struct SettingsView: View {
     }
 
     private func playbackModeOptions(including currentMode: Int) -> [EPGStationLiveStreamModeOption] {
-        if let channelCatalog {
+        if let channelCatalog = model.channelCatalog {
             let catalogOptions = channelCatalog.playbackModeOptions(for: model.liveStreamContainer)
             if !catalogOptions.isEmpty {
                 var options = catalogOptions
@@ -366,8 +365,19 @@ struct SettingsView: View {
     }
 
     private func updatePlaybackModeOptionsFromCatalog() {
-        guard let channelCatalog else { return }
+        guard let channelCatalog = model.channelCatalog else { return }
         model.setPlaybackModeOptions(channelCatalog.playbackModeOptions(for: model.liveStreamContainer))
+    }
+
+    private func normalizedEPGStationBaseURL() -> URL? {
+        errorMessage = nil
+        let trimmed = epgStationBaseURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard let url = URL(string: trimmed), url.scheme != nil, url.host != nil else {
+            errorMessage = "EPGStation URL が正しくありません。"
+            return nil
+        }
+        return url
     }
 
     private var draftChannelSettings: ChannelSettings {

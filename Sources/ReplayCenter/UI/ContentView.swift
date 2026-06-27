@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var model: TileGridModel
-    let channelCatalog: ChannelCatalogModel?
     let onChannelSelectorPresentationChanged: (Bool) -> Void
     @State private var isChannelSelectorPresented = false
     @State private var channelSelectionTargetIndex: Int?
@@ -25,7 +24,7 @@ struct ContentView: View {
         }
         .background(Color.black)
         .overlay {
-            if isChannelSelectorPresented, let channelCatalog {
+            if isChannelSelectorPresented, let channelCatalog = model.channelCatalog {
                 ChannelSelectorView(
                     catalog: channelCatalog,
                     channelSettings: model.channelSettings
@@ -43,7 +42,7 @@ struct ContentView: View {
         }
         .overlay {
             if model.isSettingsPresented {
-                SettingsView(model: model, channelCatalog: channelCatalog) {
+                SettingsView(model: model) {
                     model.dismissSettings()
                 }
             }
@@ -53,7 +52,7 @@ struct ContentView: View {
             handleKeyPress(keyPress)
         }
         .task {
-            await channelCatalog?.loadIfNeeded()
+            await model.channelCatalog?.loadIfNeeded()
             updatePlaybackModeOptionsFromCatalog()
         }
         .onAppear {
@@ -269,11 +268,15 @@ struct ContentView: View {
     }
 
     private func openChannelSelector(for index: Int) {
-        guard channelCatalog != nil else { return }
+        guard let channelCatalog = model.channelCatalog else { return }
         guard !isChannelSelectorPresented else { return }
         channelSelectionTargetIndex = model.tiles.indices.contains(index) ? index : model.focusedIndex
         isChannelSelectorPresented = true
         onChannelSelectorPresentationChanged(true)
+        Task {
+            await channelCatalog.loadIfNeeded()
+            updatePlaybackModeOptionsFromCatalog()
+        }
     }
 
     private func closeChannelSelector() {
@@ -284,7 +287,7 @@ struct ContentView: View {
     }
 
     private func updatePlaybackModeOptionsFromCatalog() {
-        guard let channelCatalog else { return }
+        guard let channelCatalog = model.channelCatalog else { return }
         model.setPlaybackModeOptions(channelCatalog.playbackModeOptions(for: model.liveStreamContainer))
     }
 }

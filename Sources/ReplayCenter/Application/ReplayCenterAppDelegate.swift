@@ -13,31 +13,33 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     private let instance: VLCInstance
     private var window: NSWindow?
     private var tileGrid: TileGridModel?
-    private var channelCatalog: ChannelCatalogModel?
     private var activity: NSObjectProtocol?
     private var shuttingDown = false
     private var shutdownComplete = false
     private var overlayBaseContentSize: CGSize?
+    private var overlayRemovedResizable = false
     private weak var terminationReplySender: NSApplication?
 
     init(config: AppConfig, configSource: String?, stateStore: AppStateStore) throws {
         self.configSource = configSource
         self.stateStore = stateStore
-        let restoredState = Self.loadSavedState(from: stateStore)
+        let savedState = Self.loadSavedState(from: stateStore)
+        let restoredState = configSource == nil ? savedState : nil
         self.restoredState = restoredState
-        self.config = config.applying(restoredState?.settings)
+        let effectiveConfig = config.applying(restoredState?.settings)
+        self.config = effectiveConfig
 
         var arguments = VLCInstance.defaultArguments + [
             "--no-osd",
             "--quiet"
         ]
-        arguments.append(contentsOf: config.vlcArguments ?? [])
-        if let networkCachingMs = config.networkCachingMs {
+        arguments.append(contentsOf: effectiveConfig.vlcArguments ?? [])
+        if let networkCachingMs = effectiveConfig.networkCachingMs {
             arguments.append("--network-caching=\(networkCachingMs)")
         }
 
         instance = try VLCInstance(arguments: arguments)
-        fputs("[app] config source=\(configSource ?? "<default>") \(config.summary)\n", stderr)
+        fputs("[app] config source=\(configSource ?? "<default>") \(effectiveConfig.summary)\n", stderr)
         fputs("[app] libvlc arguments=\(arguments)\n", stderr)
     }
 
@@ -56,11 +58,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
         let tileGrid = TileGridModel(config: config, instance: instance, restoredState: restoredState)
         self.tileGrid = tileGrid
-        let channelCatalog = config.epgStationBaseURL.map { ChannelCatalogModel(client: EPGStationClient(baseURL: $0)) }
-        self.channelCatalog = channelCatalog
         let view = ContentView(
             model: tileGrid,
-            channelCatalog: channelCatalog,
             onChannelSelectorPresentationChanged: { [weak self] isPresented in
                 self?.applyOverlayWindowMode(
                     isPresented: isPresented,
@@ -135,7 +134,6 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         Task { @MainActor in
             await tileGrid?.shutdown()
             tileGrid = nil
-            channelCatalog = nil
             window?.contentView = nil
             shutdownComplete = true
             endActivityIfNeeded()
@@ -241,6 +239,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             if overlayBaseContentSize == nil {
                 overlayBaseContentSize = window.contentLayoutRect.size
             }
+            disableWindowResizeDuringOverlay(window)
             window.contentAspectRatio = .zero
             window.contentMinSize = minimumContentSize
             guard !window.styleMask.contains(.fullScreen) else { return }
@@ -256,6 +255,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         } else {
             let restoreSize = overlayBaseContentSize
             overlayBaseContentSize = nil
+            restoreWindowResizeAfterOverlay(window)
             applyWindowLayout(tileGrid.layout, resize: false)
             guard !window.styleMask.contains(.fullScreen) else { return }
             if let restoreSize {
@@ -264,6 +264,22 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
                 applyWindowLayout(tileGrid.layout, resize: true)
             }
         }
+    }
+
+    private func disableWindowResizeDuringOverlay(_ window: NSWindow) {
+        guard !window.styleMask.contains(.fullScreen),
+              window.styleMask.contains(.resizable)
+        else {
+            return
+        }
+        window.styleMask.remove(.resizable)
+        overlayRemovedResizable = true
+    }
+
+    private func restoreWindowResizeAfterOverlay(_ window: NSWindow) {
+        guard overlayRemovedResizable else { return }
+        window.styleMask.insert(.resizable)
+        overlayRemovedResizable = false
     }
 
     private func contentSize(_ sourceSize: CGSize, fitting layout: TileLayoutConfig) -> CGSize {

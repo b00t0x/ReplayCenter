@@ -38,17 +38,21 @@ still point at Xcode's older Swift.
 ## Run
 
 ```bash
-cp config.example.json config.local.json
-vi config.local.json
 swift build --product ReplayCenterDualMonoFilter
-swift run ReplayCenter --config config.local.json
+swift run ReplayCenter
 ```
 
 ## Config
 
-`config.example.json` contains the public shape of the local config. Real
-EPGStation hosts, channel IDs, tokens, and other private values should stay in
-ignored `config.local.json` files.
+ReplayCenter can start without a JSON config. Configure the EPGStation URL from
+the in-app settings screen; runtime settings are saved in the user's Application
+Support directory.
+
+`--config` and `REPLAYCENTER_CONFIG` remain as explicit debug inputs. When one
+is provided, the JSON config for that launch is used instead of saved runtime
+settings. `config.local.json` is no longer loaded implicitly. Real EPGStation
+hosts, channel IDs, tokens, and other private values should stay out of
+committed files.
 
 Important defaults:
 

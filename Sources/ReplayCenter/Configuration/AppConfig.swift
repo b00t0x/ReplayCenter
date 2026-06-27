@@ -80,14 +80,14 @@ struct AppConfig: Decodable {
 }
 
 struct AppSettings: Codable, Equatable {
-    var startupStreams: StartupStreamsMode?
+    var epgStationBaseURL: URL?
     var volumePercent: Int?
     var keepFocusOnSingleLargeTile: Bool?
     var largeTilePlayback: TilePlaybackProfile?
     var smallTilePlayback: TilePlaybackProfile?
 
     static let empty = AppSettings(
-        startupStreams: nil,
+        epgStationBaseURL: nil,
         volumePercent: nil,
         keepFocusOnSingleLargeTile: nil,
         largeTilePlayback: nil,
@@ -96,7 +96,7 @@ struct AppSettings: Codable, Equatable {
 
     static func defaults(from config: AppConfig) -> AppSettings {
         AppSettings(
-            startupStreams: config.startupStreams ?? .configured,
+            epgStationBaseURL: config.epgStationBaseURL,
             volumePercent: VolumeLevel.normalized(config.volumePercent),
             keepFocusOnSingleLargeTile: config.keepFocusOnSingleLargeTile ?? true,
             largeTilePlayback: config.largeTilePlayback ?? config.defaultPlaybackProfile,
@@ -107,7 +107,7 @@ struct AppSettings: Codable, Equatable {
     func fillingDefaults(from config: AppConfig) -> AppSettings {
         let defaultPlaybackProfile = config.defaultPlaybackProfile
         return AppSettings(
-            startupStreams: startupStreams ?? config.startupStreams ?? .configured,
+            epgStationBaseURL: epgStationBaseURL ?? config.epgStationBaseURL,
             volumePercent: VolumeLevel.normalized(volumePercent ?? config.volumePercent),
             keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile
                 ?? config.keepFocusOnSingleLargeTile
@@ -123,7 +123,7 @@ struct AppSettings: Codable, Equatable {
 
     var summary: String {
         [
-            "startupStreams=\(startupStreams?.rawValue ?? "<nil>")",
+            "epgStationBaseURL=\(epgStationBaseURL?.absoluteString ?? "<nil>")",
             "volumePercent=\(volumePercent.map(String.init) ?? "<nil>")",
             "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")",
             "largeTilePlayback=\(largeTilePlayback?.summary ?? "<nil>")",
@@ -136,9 +136,7 @@ extension AppConfig {
     func applying(_ settings: AppSettings?) -> AppConfig {
         guard let settings else { return self }
         var config = self
-        if let startupStreams = settings.startupStreams {
-            config.startupStreams = startupStreams
-        }
+        config.epgStationBaseURL = settings.epgStationBaseURL
         if let volumePercent = settings.volumePercent {
             config.volumePercent = VolumeLevel.normalized(volumePercent)
         }
