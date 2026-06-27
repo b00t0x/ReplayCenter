@@ -30,6 +30,7 @@ struct ContentView: View {
                     catalog: channelCatalog,
                     channelSettings: model.channelSettings
                 ) { item in
+                    updatePlaybackModeOptionsFromCatalog()
                     model.playChannel(
                         item.channel,
                         at: channelSelectionTargetIndex ?? model.focusedIndex
@@ -53,6 +54,7 @@ struct ContentView: View {
         }
         .task {
             await channelCatalog?.loadIfNeeded()
+            updatePlaybackModeOptionsFromCatalog()
         }
         .onAppear {
             model.focusInitialTileIfNeeded()
@@ -279,5 +281,10 @@ struct ContentView: View {
         isChannelSelectorPresented = false
         channelSelectionTargetIndex = nil
         onChannelSelectorPresentationChanged(false)
+    }
+
+    private func updatePlaybackModeOptionsFromCatalog() {
+        guard let channelCatalog else { return }
+        model.setPlaybackModeOptions(channelCatalog.playbackModeOptions(for: model.liveStreamContainer))
     }
 }

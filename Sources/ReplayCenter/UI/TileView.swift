@@ -43,6 +43,19 @@ struct TileView: View {
                         .background(.black.opacity(0.65))
                 }
             }
+            .overlay(alignment: .topTrailing) {
+                if isHovering, model.stream != nil {
+                    Text(model.playbackDebugText)
+                        .font(.caption2.monospaced())
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.72))
+                        .foregroundStyle(.white)
+                        .padding(6)
+                }
+            }
             .overlay {
                 Rectangle()
                     .stroke(focusStrokeColor, lineWidth: dropTarget ? 5 : 2)

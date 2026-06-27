@@ -45,6 +45,10 @@ final class TileModel: Identifiable {
         start()
     }
 
+    func updateStreamMetadata(_ stream: StreamConfig) {
+        self.stream = stream
+    }
+
     func clear() {
         stream = nil
         started = false
@@ -207,6 +211,26 @@ final class TileModel: Identifiable {
             return streamValue!
         }
         return config.effectiveDeinterlaceLabel
+    }
+
+    var playbackDebugText: String {
+        guard let stream else { return "未割り当て" }
+        let modeText: String
+        if let playbackMode = stream.playbackMode {
+            let modeName = stream.playbackModeName ?? "mode \(playbackMode)"
+            modeText = "\(modeName) / mode \(playbackMode)"
+        } else {
+            modeText = "固定URL"
+        }
+
+        let sourceText: String
+        if let isUnconverted = stream.isUnconvertedPlayback {
+            sourceText = isUnconverted ? "raw" : "transcoded"
+        } else {
+            sourceText = "source=?"
+        }
+
+        return "\(modeText)\n\(sourceText) / deinterlace=\(effectiveDeinterlaceLabel)"
     }
 
     private func log(_ message: String) {

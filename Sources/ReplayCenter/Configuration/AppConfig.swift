@@ -17,6 +17,8 @@ struct AppConfig: Decodable {
     var tileLayout: TileLayoutConfig?
     var startupStreams: StartupStreamsMode?
     var keepFocusOnSingleLargeTile: Bool?
+    var largeTilePlayback: TilePlaybackProfile?
+    var smallTilePlayback: TilePlaybackProfile?
     var streams: [StreamConfig]
 
     static let empty = AppConfig(
@@ -36,6 +38,8 @@ struct AppConfig: Decodable {
         tileLayout: nil,
         startupStreams: .configured,
         keepFocusOnSingleLargeTile: true,
+        largeTilePlayback: nil,
+        smallTilePlayback: nil,
         streams: []
     )
 
@@ -59,10 +63,19 @@ struct AppConfig: Decodable {
             "tileLayout=\(tileLayout?.summary ?? "<auto>")",
             "startupStreams=\(startupStreams?.rawValue ?? "<nil>")",
             "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")",
+            "largeTilePlayback=\((largeTilePlayback ?? defaultPlaybackProfile).summary)",
+            "smallTilePlayback=\((smallTilePlayback ?? defaultPlaybackProfile).summary)",
             "dualMonoFilter=\((dualMonoFilter ?? .default).summary)",
             "vlcArguments=\(vlcArguments ?? [])",
             "mediaOptions=\(mediaOptions ?? [])"
         ].joined(separator: " ")
+    }
+
+    var defaultPlaybackProfile: TilePlaybackProfile {
+        TilePlaybackProfile(
+            liveStreamMode: liveStreamMode ?? 0,
+            deinterlace: effectiveDeinterlaceLabel
+        )
     }
 }
 
@@ -70,28 +83,41 @@ struct AppSettings: Codable, Equatable {
     var startupStreams: StartupStreamsMode?
     var volumePercent: Int?
     var keepFocusOnSingleLargeTile: Bool?
+    var largeTilePlayback: TilePlaybackProfile?
+    var smallTilePlayback: TilePlaybackProfile?
 
     static let empty = AppSettings(
         startupStreams: nil,
         volumePercent: nil,
-        keepFocusOnSingleLargeTile: nil
+        keepFocusOnSingleLargeTile: nil,
+        largeTilePlayback: nil,
+        smallTilePlayback: nil
     )
 
     static func defaults(from config: AppConfig) -> AppSettings {
         AppSettings(
             startupStreams: config.startupStreams ?? .configured,
             volumePercent: VolumeLevel.normalized(config.volumePercent),
-            keepFocusOnSingleLargeTile: config.keepFocusOnSingleLargeTile ?? true
+            keepFocusOnSingleLargeTile: config.keepFocusOnSingleLargeTile ?? true,
+            largeTilePlayback: config.largeTilePlayback ?? config.defaultPlaybackProfile,
+            smallTilePlayback: config.smallTilePlayback ?? config.defaultPlaybackProfile
         )
     }
 
     func fillingDefaults(from config: AppConfig) -> AppSettings {
-        AppSettings(
+        let defaultPlaybackProfile = config.defaultPlaybackProfile
+        return AppSettings(
             startupStreams: startupStreams ?? config.startupStreams ?? .configured,
             volumePercent: VolumeLevel.normalized(volumePercent ?? config.volumePercent),
             keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile
                 ?? config.keepFocusOnSingleLargeTile
-                ?? true
+                ?? true,
+            largeTilePlayback: largeTilePlayback
+                ?? config.largeTilePlayback
+                ?? defaultPlaybackProfile,
+            smallTilePlayback: smallTilePlayback
+                ?? config.smallTilePlayback
+                ?? defaultPlaybackProfile
         )
     }
 
@@ -99,7 +125,9 @@ struct AppSettings: Codable, Equatable {
         [
             "startupStreams=\(startupStreams?.rawValue ?? "<nil>")",
             "volumePercent=\(volumePercent.map(String.init) ?? "<nil>")",
-            "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")"
+            "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")",
+            "largeTilePlayback=\(largeTilePlayback?.summary ?? "<nil>")",
+            "smallTilePlayback=\(smallTilePlayback?.summary ?? "<nil>")"
         ].joined(separator: " ")
     }
 }
@@ -117,7 +145,32 @@ extension AppConfig {
         if let keepFocusOnSingleLargeTile = settings.keepFocusOnSingleLargeTile {
             config.keepFocusOnSingleLargeTile = keepFocusOnSingleLargeTile
         }
+        if let largeTilePlayback = settings.largeTilePlayback {
+            config.largeTilePlayback = largeTilePlayback
+        }
+        if let smallTilePlayback = settings.smallTilePlayback {
+            config.smallTilePlayback = smallTilePlayback
+        }
         return config
+    }
+}
+
+struct TilePlaybackProfile: Codable, Equatable, Hashable {
+    var liveStreamMode: Int
+    var deinterlace: String
+
+    static let fallback = TilePlaybackProfile(liveStreamMode: 0, deinterlace: "yadif")
+
+    var summary: String {
+        "mode=\(liveStreamMode),deinterlace=\(deinterlace)"
+    }
+
+    var deinterlaceForPlayback: String {
+        deinterlaceForPlayback(isUnconverted: nil)
+    }
+
+    func deinterlaceForPlayback(isUnconverted: Bool?) -> String {
+        isUnconverted == true ? deinterlace : "off"
     }
 }
 
@@ -522,10 +575,20 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
 
 struct StreamConfig: Decodable, Identifiable {
     var id: String { title ?? url }
+    var channelID: Int?
+    var playbackMode: Int?
+    var playbackModeName: String?
+    var isUnconvertedPlayback: Bool?
     var title: String?
     var url: String
     var muted: Bool?
     var audioMode: AudioMode?
     var deinterlace: String?
     var mediaOptions: [String]?
+
+    func hasSamePlaybackPipeline(as other: StreamConfig) -> Bool {
+        url == other.url
+            && deinterlace == other.deinterlace
+            && mediaOptions == other.mediaOptions
+    }
 }

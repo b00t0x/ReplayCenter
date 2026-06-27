@@ -6,6 +6,14 @@
   "vlcArguments": [],
   "networkCachingMs": 1000,
   "deinterlace": "yadif",
+  "largeTilePlayback": {
+    "liveStreamMode": 0,
+    "deinterlace": "yadif"
+  },
+  "smallTilePlayback": {
+    "liveStreamMode": 0,
+    "deinterlace": "yadif"
+  },
   "mediaOptions": [],
   "volumePercent": 100,
   "dualMonoFilter": {

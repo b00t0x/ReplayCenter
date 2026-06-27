@@ -54,12 +54,14 @@ Important defaults:
 
 - `epgStationBaseURL`: EPGStation host URL used by the channel selection layer
 - `liveStreamContainer`: `m2ts` or `m2tsll`
-- `liveStreamMode`: EPGStation live stream mode, with `0` commonly used for unconverted `m2ts`
+- `liveStreamMode`: fallback EPGStation live stream mode, with `0` commonly used for unconverted `m2ts`
+- `largeTilePlayback` / `smallTilePlayback`: EPGStation live stream mode and
+  deinterlace mode used for channel selection on large and small tiles
 - `tileLayout`: fixed tile grid, for example `{ "columns": 3, "rows": 2 }`
 - `startupStreams`: `configured` starts streams from config, `empty` starts with unassigned tiles
 - `keepFocusOnSingleLargeTile`: when a layout has exactly one large tile,
   focusing a small tile swaps it into the large tile. Defaults to `true`.
-- `deinterlace`: `yadif`
+- `deinterlace`: fallback deinterlace mode, for example `yadif`
 - `networkCachingMs`: `1000`
 - `volumePercent`: global playback volume, clamped to `0` through `100` and
   rounded to 5% steps
@@ -71,6 +73,14 @@ Important defaults:
 `ReplayCenterDualMonoFilter` executable next to the app binary or in
 `.build/debug` / `.build/release`. Set `REPLAYCENTER_TS_FILTER_PATH` or
 `dualMonoFilter.filterPath` when using a custom helper path.
+
+For EPGStation channel selection, playback profiles are applied by tile size.
+Mode names are loaded from EPGStation's `/api/config` `streamConfig` response.
+When `isUnconverted` is `true`, ReplayCenter treats the stream as
+raw/interlaced input and applies the selected deinterlace mode. Otherwise it
+treats the stream as transcoded/progressive input and forces deinterlace off.
+Already selected EPGStation channels are restarted only when the effective
+playback pipeline changes. Fixed URL streams from config remain URL-driven.
 
 The current implementation uses `/usr/bin/curl` to read the EPGStation live TS
 stream and pipe it into the helper. This is a development bridge; the intended

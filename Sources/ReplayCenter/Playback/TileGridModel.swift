@@ -10,6 +10,7 @@ final class TileGridModel {
     var layout: TileLayoutConfig
     var settings: AppSettings
     var channelSettings: ChannelSettings
+    var playbackModeOptions: [EPGStationLiveStreamModeOption]
     var volumePercent: Int
     var isSettingsPresented = false
     @ObservationIgnored var onLayoutChanged: ((TileLayoutConfig) -> Void)?
@@ -26,6 +27,9 @@ final class TileGridModel {
         let initialSettings = (restoredState?.settings ?? .empty).fillingDefaults(from: config)
         self.settings = initialSettings
         self.channelSettings = (restoredState?.channelSettings ?? .empty).normalized
+        self.playbackModeOptions = [
+            EPGStationLiveStreamModeOption.fallback(mode: initialSettings.largeTilePlayback?.liveStreamMode ?? 0)
+        ]
         let initialVolumePercent = VolumeLevel.normalized(initialSettings.volumePercent)
         self.volumePercent = initialVolumePercent
         var config = config
@@ -91,8 +95,11 @@ final class TileGridModel {
         else {
             return index
         }
-        _ = swapTiles(index, largeIndex, focusedIndexAfterSwap: nil)
-        return largeIndex
+        if swapTiles(index, largeIndex, focusedIndexAfterSwap: nil) {
+            applyPlaybackProfilesToTiles(at: [index, largeIndex], restartPolicy: .whenModeChanges)
+            return largeIndex
+        }
+        return index
     }
 
     @discardableResult
@@ -159,23 +166,75 @@ final class TileGridModel {
     func playChannel(_ channel: EPGStationChannel, at index: Int, focusAfterPlay: Bool = false) {
         guard tiles.indices.contains(index), let epgStationClient else { return }
 
-        let url = epgStationClient.liveStreamURL(
+        let stream = streamConfig(
             channelID: channel.id,
-            container: config.liveStreamContainer ?? .m2ts,
-            mode: config.liveStreamMode ?? 0
-        )
-        let stream = StreamConfig(
             title: channel.name,
-            url: url.absoluteString,
-            muted: nil,
-            audioMode: nil,
-            deinterlace: nil,
-            mediaOptions: nil
+            tileIndex: index,
+            epgStationClient: epgStationClient
         )
         tiles[index].play(stream: stream)
         if focusAfterPlay {
             focus(index)
         }
+    }
+
+    private func streamConfig(
+        channelID: Int,
+        title: String?,
+        tileIndex: Int,
+        epgStationClient: EPGStationClient
+    ) -> StreamConfig {
+        let profile = playbackProfile(for: tileIndex)
+        let modeOption = playbackModeOption(for: profile.liveStreamMode)
+        let url = epgStationClient.liveStreamURL(
+            channelID: channelID,
+            container: liveStreamContainer,
+            mode: profile.liveStreamMode
+        )
+        return StreamConfig(
+            channelID: channelID,
+            playbackMode: profile.liveStreamMode,
+            playbackModeName: modeOption?.name,
+            isUnconvertedPlayback: modeOption?.isUnconverted,
+            title: title,
+            url: url.absoluteString,
+            muted: nil,
+            audioMode: nil,
+            deinterlace: profile.deinterlaceForPlayback(isUnconverted: modeOption?.isUnconverted),
+            mediaOptions: nil
+        )
+    }
+
+    private func playbackProfile(for tileIndex: Int) -> TilePlaybackProfile {
+        let isLargeTile = layout.placement(at: tileIndex)?.spansMultipleCells ?? false
+        let fallback = config.defaultPlaybackProfile
+        if isLargeTile {
+            return settings.largeTilePlayback ?? config.largeTilePlayback ?? fallback
+        }
+        return settings.smallTilePlayback ?? config.smallTilePlayback ?? fallback
+    }
+
+    var liveStreamContainer: LiveStreamContainer {
+        config.liveStreamContainer ?? .m2ts
+    }
+
+    func setPlaybackModeOptions(_ options: [EPGStationLiveStreamModeOption]) {
+        let normalizedOptions = options.isEmpty ? [.fallback(mode: config.liveStreamMode ?? 0)] : options
+        guard playbackModeOptions != normalizedOptions else { return }
+        playbackModeOptions = normalizedOptions
+        updatePlaybackMetadataForTiles()
+    }
+
+    func playbackModeOptions(including currentMode: Int) -> [EPGStationLiveStreamModeOption] {
+        var options = playbackModeOptions
+        if !options.contains(where: { $0.mode == currentMode }) {
+            options.append(.fallback(mode: currentMode))
+        }
+        return options.sorted { $0.mode < $1.mode }
+    }
+
+    private func playbackModeOption(for mode: Int) -> EPGStationLiveStreamModeOption? {
+        playbackModeOptions.first { $0.mode == mode }
     }
 
     func clearFocusedTile() {
@@ -223,6 +282,14 @@ final class TileGridModel {
         var settings = settings
         settings.volumePercent = normalizedVolume
         settings.keepFocusOnSingleLargeTile = settings.keepFocusOnSingleLargeTile ?? true
+        settings.largeTilePlayback = settings.largeTilePlayback
+            ?? self.settings.largeTilePlayback
+            ?? config.largeTilePlayback
+            ?? config.defaultPlaybackProfile
+        settings.smallTilePlayback = settings.smallTilePlayback
+            ?? self.settings.smallTilePlayback
+            ?? config.smallTilePlayback
+            ?? config.defaultPlaybackProfile
         self.settings = settings
         self.channelSettings = channelSettings.normalized
         config = config.applying(settings)
@@ -230,9 +297,81 @@ final class TileGridModel {
         for tile in tiles {
             tile.setVolumePercent(normalizedVolume)
         }
+        applyPlaybackProfilesToTiles(restartPolicy: .whenPlaybackPipelineChanges)
         focus(focusedIndex)
         onSettingsChanged?(settings)
         return true
+    }
+
+    private enum PlaybackProfileRestartPolicy {
+        case whenPlaybackPipelineChanges
+        case whenModeChanges
+        case never
+    }
+
+    private func applyPlaybackProfilesToTiles(restartPolicy: PlaybackProfileRestartPolicy) {
+        applyPlaybackProfilesToTiles(at: Array(tiles.indices), restartPolicy: restartPolicy)
+    }
+
+    private func applyPlaybackProfilesToTiles(
+        at indices: [Int],
+        restartPolicy: PlaybackProfileRestartPolicy
+    ) {
+        guard let epgStationClient else { return }
+        for index in indices where tiles.indices.contains(index) {
+            guard let stream = tiles[index].stream, let channelID = stream.channelID else { continue }
+            let updatedStream = streamConfig(
+                channelID: channelID,
+                title: stream.title,
+                tileIndex: index,
+                epgStationClient: epgStationClient
+            )
+            if shouldRestartPlayback(
+                currentStream: stream,
+                updatedStream: updatedStream,
+                policy: restartPolicy
+            ) {
+                tiles[index].play(stream: updatedStream)
+            } else {
+                tiles[index].updateStreamMetadata(
+                    metadataStream(
+                        currentStream: stream,
+                        updatedStream: updatedStream,
+                        policy: restartPolicy
+                    )
+                )
+            }
+        }
+    }
+
+    private func updatePlaybackMetadataForTiles() {
+        applyPlaybackProfilesToTiles(restartPolicy: .never)
+    }
+
+    private func shouldRestartPlayback(
+        currentStream: StreamConfig,
+        updatedStream: StreamConfig,
+        policy: PlaybackProfileRestartPolicy
+    ) -> Bool {
+        switch policy {
+        case .whenPlaybackPipelineChanges:
+            return !currentStream.hasSamePlaybackPipeline(as: updatedStream)
+        case .whenModeChanges:
+            return currentStream.playbackMode != updatedStream.playbackMode
+        case .never:
+            return false
+        }
+    }
+
+    private func metadataStream(
+        currentStream: StreamConfig,
+        updatedStream: StreamConfig,
+        policy: PlaybackProfileRestartPolicy
+    ) -> StreamConfig {
+        guard policy == .whenModeChanges else { return updatedStream }
+        var metadata = updatedStream
+        metadata.deinterlace = currentStream.deinterlace
+        return metadata
     }
 
     @discardableResult

@@ -19,6 +19,10 @@ struct EPGStationClient {
         ])
     }
 
+    func fetchConfig() async throws -> EPGStationConfig {
+        try await get("api/config")
+    }
+
     func liveStreamURL(
         channelID: Int,
         container: LiveStreamContainer = .m2ts,

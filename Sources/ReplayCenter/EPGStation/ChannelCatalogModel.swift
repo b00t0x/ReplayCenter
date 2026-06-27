@@ -14,8 +14,10 @@ final class ChannelCatalogModel {
     private var hasLoaded = false
 
     var items: [ChannelSelectionItem] = []
+    var playbackModeOptionsByContainer: [LiveStreamContainer: [EPGStationLiveStreamModeOption]] = [:]
     var isLoading = false
     var errorMessage: String?
+    var configErrorMessage: String?
 
     init(client: EPGStationClient) {
         self.client = client
@@ -29,6 +31,7 @@ final class ChannelCatalogModel {
     func reload() async {
         isLoading = true
         errorMessage = nil
+        configErrorMessage = nil
         defer {
             isLoading = false
             hasLoaded = true
@@ -49,6 +52,22 @@ final class ChannelCatalogModel {
             }
         } catch {
             errorMessage = error.localizedDescription
+            return
         }
+
+        do {
+            let config = try await client.fetchConfig()
+            playbackModeOptionsByContainer = [
+                .m2ts: config.liveStreamModeOptions(for: .m2ts),
+                .m2tsll: config.liveStreamModeOptions(for: .m2tsll)
+            ]
+        } catch {
+            playbackModeOptionsByContainer = [:]
+            configErrorMessage = error.localizedDescription
+        }
+    }
+
+    func playbackModeOptions(for container: LiveStreamContainer) -> [EPGStationLiveStreamModeOption] {
+        playbackModeOptionsByContainer[container] ?? []
     }
 }

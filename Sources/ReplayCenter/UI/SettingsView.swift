@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var selectedSection: SettingsSection = .general
     @State private var startupStreams: StartupStreamsMode
     @State private var volumePercent: Int
+    @State private var largeTilePlayback: TilePlaybackProfile
+    @State private var smallTilePlayback: TilePlaybackProfile
     @State private var tileLayout: TileLayoutConfig
     @State private var tileLayoutCategory: TileLayoutCategory
     @State private var keepFocusOnSingleLargeTile: Bool
@@ -23,6 +25,12 @@ struct SettingsView: View {
         self.onClose = onClose
         _startupStreams = State(initialValue: model.settings.startupStreams ?? .configured)
         _volumePercent = State(initialValue: VolumeLevel.normalized(model.settings.volumePercent))
+        _largeTilePlayback = State(
+            initialValue: model.settings.largeTilePlayback ?? TilePlaybackProfile.fallback
+        )
+        _smallTilePlayback = State(
+            initialValue: model.settings.smallTilePlayback ?? TilePlaybackProfile.fallback
+        )
         _tileLayout = State(initialValue: model.layout)
         _tileLayoutCategory = State(initialValue: TileLayoutCategory.category(for: model.layout))
         _keepFocusOnSingleLargeTile = State(
@@ -55,6 +63,7 @@ struct SettingsView: View {
         }
         .task {
             await channelCatalog?.loadIfNeeded()
+            updatePlaybackModeOptionsFromCatalog()
         }
     }
 
@@ -187,6 +196,30 @@ struct SettingsView: View {
                 }
                 .frame(maxWidth: 220, alignment: .leading)
             }
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("ストリーム")
+                    .font(.headline)
+
+                HStack(alignment: .top, spacing: 24) {
+                    PlaybackProfileEditor(
+                        title: "ラージタイル",
+                        profile: $largeTilePlayback,
+                        modeOptions: playbackModeOptions(including: largeTilePlayback.liveStreamMode)
+                    )
+                    PlaybackProfileEditor(
+                        title: "スモールタイル",
+                        profile: $smallTilePlayback,
+                        modeOptions: playbackModeOptions(including: smallTilePlayback.liveStreamMode)
+                    )
+                }
+
+                if let configErrorMessage = channelCatalog?.configErrorMessage {
+                    Text("EPGStation 設定を取得できません: \(configErrorMessage)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
@@ -299,10 +332,13 @@ struct SettingsView: View {
     }
 
     private func save() {
+        updatePlaybackModeOptionsFromCatalog()
         let settings = AppSettings(
             startupStreams: startupStreams,
             volumePercent: VolumeLevel.normalized(volumePercent),
-            keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile
+            keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile,
+            largeTilePlayback: largeTilePlayback,
+            smallTilePlayback: smallTilePlayback
         )
         guard model.applySettings(
             settings,
@@ -313,6 +349,25 @@ struct SettingsView: View {
             return
         }
         onClose()
+    }
+
+    private func playbackModeOptions(including currentMode: Int) -> [EPGStationLiveStreamModeOption] {
+        if let channelCatalog {
+            let catalogOptions = channelCatalog.playbackModeOptions(for: model.liveStreamContainer)
+            if !catalogOptions.isEmpty {
+                var options = catalogOptions
+                if !options.contains(where: { $0.mode == currentMode }) {
+                    options.append(.fallback(mode: currentMode))
+                }
+                return options.sorted { $0.mode < $1.mode }
+            }
+        }
+        return model.playbackModeOptions(including: currentMode)
+    }
+
+    private func updatePlaybackModeOptionsFromCatalog() {
+        guard let channelCatalog else { return }
+        model.setPlaybackModeOptions(channelCatalog.playbackModeOptions(for: model.liveStreamContainer))
     }
 
     private var draftChannelSettings: ChannelSettings {
@@ -378,6 +433,55 @@ private struct ChannelSettingsRowModel: Identifiable, Hashable {
         self.title = "不明なチャンネル"
         self.detail = "チャンネル情報を取得できません (ID: \(channelID))"
         self.isMissing = true
+    }
+}
+
+private struct PlaybackProfileEditor: View {
+    let title: String
+    @Binding var profile: TilePlaybackProfile
+    let modeOptions: [EPGStationLiveStreamModeOption]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+
+            Picker("方式", selection: $profile.liveStreamMode) {
+                ForEach(modeOptions) { option in
+                    Text(option.label).tag(option.mode)
+                }
+            }
+            .frame(width: 220, alignment: .leading)
+
+            Picker("インタレ解除", selection: $profile.deinterlace) {
+                ForEach(deinterlaceOptions(for: profile.deinterlace), id: \.value) { option in
+                    Text(option.label).tag(option.value)
+                }
+            }
+            .frame(width: 220, alignment: .leading)
+            .disabled(!allowsDeinterlace)
+            .opacity(allowsDeinterlace ? 1 : 0.45)
+        }
+    }
+
+    private var allowsDeinterlace: Bool {
+        modeOptions.first { $0.mode == profile.liveStreamMode }?.isUnconverted == true
+    }
+
+    private func deinterlaceOptions(for currentValue: String) -> [(value: String, label: String)] {
+        var options: [(value: String, label: String)] = [
+            ("yadif", "yadif"),
+            ("bob", "bob"),
+            ("linear", "linear"),
+            ("blend", "blend"),
+            ("auto", "auto"),
+            ("off", "なし")
+        ]
+        if !options.contains(where: { $0.value == currentValue }) {
+            let label = currentValue == "<unchanged>" ? "変更しない" : currentValue
+            options.append((currentValue, label))
+        }
+        return options
     }
 }
 
