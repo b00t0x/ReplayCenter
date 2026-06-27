@@ -86,9 +86,7 @@ treats the stream as transcoded/progressive input and forces deinterlace off.
 Already selected EPGStation channels are restarted only when the effective
 playback pipeline changes. Fixed URL streams from config remain URL-driven.
 
-The current implementation uses `/usr/bin/curl` to read the EPGStation live TS
-stream and pipe it into the helper. This is a development bridge; the intended
-longer-term implementation is to read the stream inside ReplayCenter and write
+ReplayCenter reads the EPGStation live TS stream inside the app and writes it
 to the helper stdin directly.
 
 Initial local validation of the filter-only playback path:
@@ -135,7 +133,7 @@ Playback flow:
 
 ```text
 EPGStation live stream
-  -> /usr/bin/curl
+  -> app-internal HTTP stream reader
   -> ReplayCenterDualMonoFilter
   -> SwiftVLC Media(fileDescriptor:)
   -> focused-tile audio / tiled video
@@ -158,8 +156,9 @@ Tile playback state is intentionally minimal:
 - `playing`: normal state, no visible badge
 - `failed`: visible `再生失敗` badge on the tile, with details in stderr
 
-The pipeline logs helper exits with the tile label. If playback fails, check the
-terminal output for `curl exited`, `dual mono filter exited`, or
+The pipeline logs stream and helper exits with the tile label. If playback
+fails, check the terminal output for `stream input ended`,
+`dual mono filter exited`, or
 `playback failed`.
 
 The focused tile controls currently show audio stream detection state for
@@ -169,7 +168,6 @@ information" setting, rather than living in the main operation controls.
 
 Current development TODOs:
 
-- Replace the `/usr/bin/curl` bridge with app-internal stream reading.
 - Decide the final tile operation UI before polishing shortcuts and overlays.
 - Keep the on-tile state display quiet during normal playback; show only
   actionable failures unless debugging needs more detail.

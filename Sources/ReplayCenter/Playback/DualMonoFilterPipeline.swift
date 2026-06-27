@@ -4,7 +4,7 @@ import SwiftVLC
 
 enum DualMonoFilterPipelineEvent: Sendable {
     case audioStateChanged(AudioStreamState)
-    case curlExited(status: Int32, reason: Int, stderr: String?)
+    case streamInputEnded(error: String?)
     case filterExited(status: Int32, reason: Int)
 }
 
@@ -14,7 +14,7 @@ final class DualMonoFilterPipeline {
     private let label: String
     private let config: DualMonoFilterConfig
     private let onEvent: @Sendable (DualMonoFilterPipelineEvent) -> Void
-    private var curlProcess: Process?
+    private var streamPump: HTTPStreamPump?
     private var filterProcess: Process?
     private var filterInputPipe: Pipe?
     private var filterOutputPipe: Pipe?
@@ -67,60 +67,27 @@ final class DualMonoFilterPipeline {
             ))
         }
 
-        let curlErrorPipe = Pipe()
-        let curlProcess = Process()
-        curlProcess.executableURL = URL(fileURLWithPath: absolutePath(config.curlPath ?? "/usr/bin/curl"))
-        curlProcess.arguments = [
-            "--silent",
-            "--show-error",
-            "--location",
-            "--no-buffer",
-            streamURL
-        ]
-        curlProcess.standardOutput = inputPipe
-        curlProcess.standardError = curlErrorPipe
-        curlProcess.terminationHandler = { [label, onEvent] process in
-            inputPipe.fileHandleForWriting.closeFile()
-            let errorData = curlErrorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-
-            if process.terminationStatus == 23 {
-                fputs(
-                    "[\(label)] curl exited after downstream closed status=23 reason=\(process.terminationReason.rawValue)\n",
-                    stderr
-                )
-                onEvent(.curlExited(
-                    status: process.terminationStatus,
-                    reason: process.terminationReason.rawValue,
-                    stderr: errorMessage?.isEmpty == false ? errorMessage : nil
-                ))
-                return
-            }
-
-            fputs(
-                "[\(label)] curl exited status=\(process.terminationStatus) reason=\(process.terminationReason.rawValue)\n",
-                stderr
-            )
-            if let errorMessage, !errorMessage.isEmpty {
-                fputs("[\(label)] curl stderr: \(errorMessage)\n", stderr)
-            }
-            onEvent(.curlExited(
-                status: process.terminationStatus,
-                reason: process.terminationReason.rawValue,
-                stderr: errorMessage?.isEmpty == false ? errorMessage : nil
-            ))
+        guard let url = URL(string: streamURL) else {
+            throw NSError(domain: "ReplayCenter.StreamInput", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "invalid stream url: \(streamURL)"
+            ])
         }
+        let streamPump = HTTPStreamPump(
+            url: url,
+            label: label,
+            outputFileHandle: inputPipe.fileHandleForWriting,
+            onEvent: onEvent
+        )
 
         self.filterProcess = filterProcess
-        self.curlProcess = curlProcess
+        self.streamPump = streamPump
         self.filterErrorPipe = filterErrorPipe
         self.filterStatusReader = filterStatusReader
 
         do {
             try filterProcess.run()
             filterStatusReader.start(reading: filterErrorPipe.fileHandleForReading)
-            try curlProcess.run()
+            streamPump.start()
         } catch {
             stop()
             throw error
@@ -143,9 +110,10 @@ final class DualMonoFilterPipeline {
     }
 
     func stop() {
-        terminate(curlProcess)
+        let streamPump = streamPump
+        streamPump?.stop()
         terminate(filterProcess)
-        curlProcess = nil
+        self.streamPump = nil
         filterProcess = nil
 
         filterStatusReader?.stop()
@@ -153,7 +121,9 @@ final class DualMonoFilterPipeline {
         filterErrorPipe?.fileHandleForReading.closeFile()
         filterErrorPipe = nil
 
-        filterInputPipe?.fileHandleForWriting.closeFile()
+        if streamPump == nil {
+            filterInputPipe?.fileHandleForWriting.closeFile()
+        }
         filterInputPipe?.fileHandleForReading.closeFile()
         filterInputPipe = nil
         filterOutputPipe = nil
@@ -214,6 +184,149 @@ private func absolutePath(_ path: String) -> String {
         .appendingPathComponent(expanded)
         .standardized
         .path
+}
+
+private final class HTTPStreamPump: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let url: URL
+    private let label: String
+    private let outputFileHandle: FileHandle
+    private let onEvent: @Sendable (DualMonoFilterPipelineEvent) -> Void
+    private let lock = NSLock()
+    private var session: URLSession?
+    private var task: URLSessionDataTask?
+    private var isStopped = false
+    private var hasClosedOutput = false
+    private var responseError: String?
+
+    init(
+        url: URL,
+        label: String,
+        outputFileHandle: FileHandle,
+        onEvent: @escaping @Sendable (DualMonoFilterPipelineEvent) -> Void
+    ) {
+        self.url = url
+        self.label = label
+        self.outputFileHandle = outputFileHandle
+        self.onEvent = onEvent
+    }
+
+    func start() {
+        let configuration = URLSessionConfiguration.default
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 0
+        configuration.urlCache = nil
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        let task = session.dataTask(with: request)
+        lock.lock()
+        self.session = session
+        self.task = task
+        lock.unlock()
+        task.resume()
+    }
+
+    func stop() {
+        lock.lock()
+        isStopped = true
+        let task = task
+        let session = session
+        lock.unlock()
+
+        task?.cancel()
+        session?.invalidateAndCancel()
+        closeOutput()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200..<300).contains(httpResponse.statusCode) {
+            responseError = "HTTP \(httpResponse.statusCode)"
+            completionHandler(.cancel)
+            return
+        }
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard write(data) else {
+            stop()
+            return
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        let stopped = isStoppedState
+        closeOutput()
+        session.finishTasksAndInvalidate()
+
+        guard !stopped else { return }
+        let message = responseError ?? normalizedErrorMessage(error)
+        if let message {
+            fputs("[\(label)] stream input ended error=\(message)\n", stderr)
+        } else {
+            fputs("[\(label)] stream input ended\n", stderr)
+        }
+        onEvent(.streamInputEnded(error: message))
+    }
+
+    private var isStoppedState: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isStopped
+    }
+
+    private func write(_ data: Data) -> Bool {
+        let fileDescriptor = outputFileHandle.fileDescriptor
+        return data.withUnsafeBytes { rawBuffer -> Bool in
+            guard let baseAddress = rawBuffer.baseAddress else { return true }
+            var offset = 0
+            while offset < data.count {
+                let bytesWritten = Darwin.write(
+                    fileDescriptor,
+                    baseAddress.advanced(by: offset),
+                    data.count - offset
+                )
+                if bytesWritten > 0 {
+                    offset += bytesWritten
+                    continue
+                }
+                if bytesWritten < 0 && errno == EINTR {
+                    continue
+                }
+                return false
+            }
+            return true
+        }
+    }
+
+    private func closeOutput() {
+        lock.lock()
+        guard !hasClosedOutput else {
+            lock.unlock()
+            return
+        }
+        hasClosedOutput = true
+        lock.unlock()
+        outputFileHandle.closeFile()
+    }
+
+    private func normalizedErrorMessage(_ error: Error?) -> String? {
+        guard let error else { return nil }
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+            return responseError
+        }
+        return error.localizedDescription
+    }
 }
 
 private final class FilterStatusReader: @unchecked Sendable {

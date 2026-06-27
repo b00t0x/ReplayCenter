@@ -165,12 +165,11 @@ final class TileModel: Identifiable {
             if state.supportsAudioSelectionControls {
                 dualMonoFilterPipeline?.setAudioMode(currentAudioSelection.filterAudioMode)
             }
-        case let .curlExited(status, reason, stderr):
-            let detail = "curl exited status=\(status) reason=\(reason)"
-            if let stderr {
-                failPlayback("\(detail): \(stderr)")
+        case let .streamInputEnded(error):
+            if let error {
+                failPlayback("stream input ended: \(error)")
             } else {
-                failPlayback(detail)
+                failPlayback("stream input ended")
             }
         case let .filterExited(status, reason):
             failPlayback("dual mono filter exited status=\(status) reason=\(reason)")

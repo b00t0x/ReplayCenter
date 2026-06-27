@@ -18,7 +18,6 @@
   "volumePercent": 100,
   "dualMonoFilter": {
     "filterPath": null,
-    "curlPath": "/usr/bin/curl",
     "muxSelectedToStereo": false
   },
   "audioOnlyFocusedTile": true,

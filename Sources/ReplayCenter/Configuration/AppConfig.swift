@@ -190,12 +190,10 @@ enum VolumeLevel {
 
 struct DualMonoFilterConfig: Codable, Equatable {
     var filterPath: String?
-    var curlPath: String?
     var muxSelectedToStereo: Bool?
 
     static let `default` = DualMonoFilterConfig(
         filterPath: nil,
-        curlPath: nil,
         muxSelectedToStereo: false
     )
 
@@ -206,7 +204,6 @@ struct DualMonoFilterConfig: Codable, Equatable {
     var summary: String {
         [
             "filterPath=\(filterPath ?? "<auto>")",
-            "curlPath=\(curlPath ?? "/usr/bin/curl")",
             "muxSelectedToStereo=\(effectiveMuxSelectedToStereo)"
         ].joined(separator: ",")
     }
@@ -249,8 +246,12 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
     static let wideTallPresets = [
         TileLayoutConfig(columns: 3, rows: 1),
         TileLayoutConfig(columns: 4, rows: 1),
+        TileLayoutConfig(columns: 5, rows: 1),
+        TileLayoutConfig(columns: 6, rows: 1),
         TileLayoutConfig(columns: 1, rows: 3),
         TileLayoutConfig(columns: 1, rows: 4),
+        TileLayoutConfig(columns: 1, rows: 5),
+        TileLayoutConfig(columns: 1, rows: 6),
         TileLayoutConfig(columns: 4, rows: 2),
         TileLayoutConfig(columns: 2, rows: 4)
     ]
