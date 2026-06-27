@@ -16,6 +16,7 @@ Current provisional keyboard and mouse controls for development:
 - Press `C` or double-click a tile to choose a channel for the focused tile.
 - Press `Delete` or `Forward Delete` to clear the focused tile.
 - Press `+` / `=` or `-` to grow or shrink the tile layout.
+- Press `[` or `]` to change the global volume in 5% steps.
 - Press `L` or `R` to switch the focused tile between primary and secondary
   audio when the stream exposes dual-mono or multiple audio streams.
 
@@ -24,6 +25,12 @@ Current provisional keyboard and mouse controls for development:
 - macOS 15+
 - Swift 6.3+
 - Xcode command line tools
+
+SwiftVLC requires Swift 6.3+. On development machines where the matching Xcode
+cannot be installed, use the Swift.org macOS toolchain from
+https://www.swift.org/install/macos/. In the current development environment,
+`~/.swiftly/bin/swift` is the Swift 6.3 toolchain while `/usr/bin/swift` may
+still point at Xcode's older Swift.
 
 ## Run
 
@@ -49,6 +56,8 @@ Important defaults:
 - `startupStreams`: `configured` starts streams from config, `empty` starts with unassigned tiles
 - `deinterlace`: `yadif`
 - `networkCachingMs`: `1000`
+- `volumePercent`: global playback volume, clamped to `0` through `100` and
+  rounded to 5% steps
 - `audioOnlyFocusedTile`: `true`
 - `dualMonoFilter`: helper process settings. `muxSelectedToStereo` defaults to
   `false`, which is the current stable setting from the PoC validation.

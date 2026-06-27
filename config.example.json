@@ -7,6 +7,7 @@
   "networkCachingMs": 1000,
   "deinterlace": "yadif",
   "mediaOptions": [],
+  "volumePercent": 100,
   "dualMonoFilter": {
     "filterPath": null,
     "curlPath": "/usr/bin/curl",

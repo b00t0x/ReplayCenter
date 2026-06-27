@@ -4,10 +4,13 @@ import SwiftVLC
 struct TileView: View {
     @Bindable var model: TileModel
     let focused: Bool
+    let volumePercent: Int
     let onFocus: () -> Void
     let onOpenChannelSelector: () -> Void
     let onSetAudioSelection: (AudioSelection) -> Void
     let onToggleMuted: () -> Void
+    let onDecreaseVolume: () -> Void
+    let onIncreaseVolume: () -> Void
     let onReload: () -> Void
     let onClear: () -> Void
     @State private var isHovering = false
@@ -49,7 +52,8 @@ struct TileView: View {
                         hasStream: model.stream != nil,
                         audioSelection: model.currentAudioSelection,
                         audioStreamState: model.audioStreamState,
-                        isMuted: model.isMuted
+                        isMuted: model.isMuted,
+                        volumePercent: volumePercent
                     ) {
                         onFocus()
                         onOpenChannelSelector()
@@ -58,6 +62,10 @@ struct TileView: View {
                         onSetAudioSelection(selection)
                     } onToggleMuted: {
                         onToggleMuted()
+                    } onDecreaseVolume: {
+                        onDecreaseVolume()
+                    } onIncreaseVolume: {
+                        onIncreaseVolume()
                     } onReload: {
                         onFocus()
                         onReload()

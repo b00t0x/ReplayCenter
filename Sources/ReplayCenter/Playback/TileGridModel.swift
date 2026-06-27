@@ -10,6 +10,7 @@ final class TileGridModel {
     var layout: TileLayoutConfig
     var settings: AppSettings
     var channelSettings: ChannelSettings
+    var volumePercent: Int
     var isSettingsPresented = false
     @ObservationIgnored var onLayoutChanged: ((TileLayoutConfig) -> Void)?
     @ObservationIgnored var onSettingsChanged: ((AppSettings) -> Void)?
@@ -25,6 +26,11 @@ final class TileGridModel {
         let initialSettings = (restoredState?.settings ?? .empty).fillingDefaults(from: config)
         self.settings = initialSettings
         self.channelSettings = (restoredState?.channelSettings ?? .empty).normalized
+        let initialVolumePercent = VolumeLevel.normalized(initialSettings.volumePercent)
+        self.volumePercent = initialVolumePercent
+        var config = config
+        config.volumePercent = initialVolumePercent
+        self.config = config
         let initialStreams = initialSettings.startupStreams == .empty ? [] : config.streams
         let initialLayout = (restoredState?.tileLayout ?? config.tileLayout ?? .automatic(tileCount: max(initialStreams.count, 1)))
             .validOrFallback
@@ -67,6 +73,26 @@ final class TileGridModel {
         let tile = tiles[focusedIndex]
         guard tile.stream != nil else { return }
         tile.setMuted(!tile.isMuted)
+    }
+
+    func increaseVolume() {
+        setVolumePercent(VolumeLevel.changed(from: volumePercent, by: VolumeLevel.step))
+    }
+
+    func decreaseVolume() {
+        setVolumePercent(VolumeLevel.changed(from: volumePercent, by: -VolumeLevel.step))
+    }
+
+    func setVolumePercent(_ percent: Int) {
+        let normalized = VolumeLevel.normalized(percent)
+        guard volumePercent != normalized else { return }
+        volumePercent = normalized
+        settings.volumePercent = normalized
+        config.volumePercent = normalized
+        for tile in tiles {
+            tile.setVolumePercent(normalized)
+        }
+        onSettingsChanged?(settings)
     }
 
     func playFocusedChannel(_ channel: EPGStationChannel) {
@@ -130,9 +156,16 @@ final class TileGridModel {
         channelSettings: ChannelSettings
     ) -> Bool {
         guard applyTileLayout(tileLayout) else { return false }
+        let normalizedVolume = VolumeLevel.normalized(settings.volumePercent)
+        var settings = settings
+        settings.volumePercent = normalizedVolume
         self.settings = settings
         self.channelSettings = channelSettings.normalized
         config = config.applying(settings)
+        volumePercent = normalizedVolume
+        for tile in tiles {
+            tile.setVolumePercent(normalizedVolume)
+        }
         onSettingsChanged?(settings)
         return true
     }

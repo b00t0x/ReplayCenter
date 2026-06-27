@@ -10,6 +10,7 @@ struct AppConfig: Decodable {
     var deinterlace: String?
     var mediaOptions: [String]?
     var dualMonoFilter: DualMonoFilterConfig?
+    var volumePercent: Int?
     var audioOnlyFocusedTile: Bool?
     var startMuted: Bool?
     var audioMode: AudioMode?
@@ -27,6 +28,7 @@ struct AppConfig: Decodable {
         deinterlace: "yadif",
         mediaOptions: [],
         dualMonoFilter: .default,
+        volumePercent: 100,
         audioOnlyFocusedTile: true,
         startMuted: true,
         audioMode: .stereo,
@@ -48,6 +50,7 @@ struct AppConfig: Decodable {
             "liveStreamMode=\(liveStreamMode.map(String.init) ?? "<nil>")",
             "deinterlace=\(effectiveDeinterlaceLabel)",
             "networkCachingMs=\(networkCachingMs.map(String.init) ?? "<nil>")",
+            "volumePercent=\(volumePercent.map(String.init) ?? "<nil>")",
             "audioOnlyFocusedTile=\(audioOnlyFocusedTile.map(String.init) ?? "<nil>")",
             "startMuted=\(startMuted.map(String.init) ?? "<nil>")",
             "audioMode=\(audioMode?.rawValue ?? "<nil>")",
@@ -62,19 +65,29 @@ struct AppConfig: Decodable {
 
 struct AppSettings: Codable, Equatable {
     var startupStreams: StartupStreamsMode?
+    var volumePercent: Int?
 
-    static let empty = AppSettings(startupStreams: nil)
+    static let empty = AppSettings(startupStreams: nil, volumePercent: nil)
 
     static func defaults(from config: AppConfig) -> AppSettings {
-        AppSettings(startupStreams: config.startupStreams ?? .configured)
+        AppSettings(
+            startupStreams: config.startupStreams ?? .configured,
+            volumePercent: VolumeLevel.normalized(config.volumePercent)
+        )
     }
 
     func fillingDefaults(from config: AppConfig) -> AppSettings {
-        AppSettings(startupStreams: startupStreams ?? config.startupStreams ?? .configured)
+        AppSettings(
+            startupStreams: startupStreams ?? config.startupStreams ?? .configured,
+            volumePercent: VolumeLevel.normalized(volumePercent ?? config.volumePercent)
+        )
     }
 
     var summary: String {
-        "startupStreams=\(startupStreams?.rawValue ?? "<nil>")"
+        [
+            "startupStreams=\(startupStreams?.rawValue ?? "<nil>")",
+            "volumePercent=\(volumePercent.map(String.init) ?? "<nil>")"
+        ].joined(separator: " ")
     }
 }
 
@@ -85,7 +98,26 @@ extension AppConfig {
         if let startupStreams = settings.startupStreams {
             config.startupStreams = startupStreams
         }
+        if let volumePercent = settings.volumePercent {
+            config.volumePercent = VolumeLevel.normalized(volumePercent)
+        }
         return config
+    }
+}
+
+enum VolumeLevel {
+    static let minimum = 0
+    static let maximum = 100
+    static let step = 5
+
+    static func normalized(_ value: Int?) -> Int {
+        guard let value else { return maximum }
+        let clamped = min(max(value, minimum), maximum)
+        return min(maximum, ((clamped + step / 2) / step) * step)
+    }
+
+    static func changed(from value: Int, by delta: Int) -> Int {
+        normalized(value + delta)
     }
 }
 

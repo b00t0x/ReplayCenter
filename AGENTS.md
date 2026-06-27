@@ -12,9 +12,19 @@ Codex 向け開発ルールである。
 ## 初期ターゲット
 
 - 初期実行環境は macOS x86。
+- 初期開発環境は macOS Sequoia。
 - バックエンドは EPGStation を主とし、必要に応じて Mirakurun を補助的に使う。
 - 初期 UI 言語は日本語。
 - バージョンは `0.0.1` から開始する。
+
+## ビルド環境
+
+- SwiftVLC が Swift 6.3+ を要求するため、Swift Package の tools version は 6.3 とする。
+- 現開発環境の macOS Sequoia には Swift 6.3 同梱 Xcode をインストールできないため、
+  Xcode は現状維持し、Swift 6.3 は https://www.swift.org/install/macos/ から導入した
+  Swift.org ツールチェインを使う。
+- 通常の `/usr/bin/swift` は Xcode 側の Swift を指す可能性がある。ビルド確認では
+  `~/.swiftly/bin/swift` など Swift.org ツールチェインの `swift` を優先して使う。
 
 ## 開発方針
 

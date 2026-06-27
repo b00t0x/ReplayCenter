@@ -11,6 +11,7 @@ final class TileModel: Identifiable {
     private(set) var audioStreamState: AudioStreamState
     private(set) var currentAudioSelection: AudioSelection
     private(set) var isMuted: Bool
+    private(set) var volumePercent: Int
     let player: Player
     private let config: AppConfig
     private var started = false
@@ -25,6 +26,8 @@ final class TileModel: Identifiable {
         audioStreamState = .unknown
         currentAudioSelection = AudioSelection(audioMode: stream?.audioMode ?? config.audioMode ?? .stereo)
         isMuted = stream?.muted ?? config.startMuted ?? true
+        volumePercent = VolumeLevel.normalized(config.volumePercent)
+        try? player.setAudioVolume(Volume(Float(volumePercent) / 100.0))
         player.isMuted = isMuted
         player.stereoMode = currentAudioSelection.filterAudioMode.stereoMode
     }
@@ -57,6 +60,15 @@ final class TileModel: Identifiable {
     func setMuted(_ muted: Bool) {
         isMuted = muted
         player.isMuted = muted
+    }
+
+    func setVolumePercent(_ percent: Int) {
+        volumePercent = VolumeLevel.normalized(percent)
+        do {
+            try player.setAudioVolume(Volume(Float(volumePercent) / 100.0))
+        } catch {
+            log("volume failed percent=\(volumePercent) error=\(error)")
+        }
     }
 
     func setAudioSelection(_ selection: AudioSelection) {
@@ -124,10 +136,11 @@ final class TileModel: Identifiable {
                 media.addOption(option)
             }
 
+            setVolumePercent(volumePercent)
             applyDeinterlaceIfNeeded()
             try player.play(media)
             playbackState = .playing
-            log("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel) audioSelection=\(currentAudioSelection.rawValue) filter=\((config.dualMonoFilter ?? .default).summary)")
+            log("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel) volume=\(volumePercent) audioSelection=\(currentAudioSelection.rawValue) filter=\((config.dualMonoFilter ?? .default).summary)")
         } catch {
             playbackState = .failed(error.localizedDescription)
             activePipelineID = nil

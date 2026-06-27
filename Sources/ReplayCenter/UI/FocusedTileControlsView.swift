@@ -5,9 +5,12 @@ struct FocusedTileControlsView: View {
     let audioSelection: AudioSelection
     let audioStreamState: AudioStreamState
     let isMuted: Bool
+    let volumePercent: Int
     let onChangeChannel: () -> Void
     let onSetAudioSelection: (AudioSelection) -> Void
     let onToggleMuted: () -> Void
+    let onDecreaseVolume: () -> Void
+    let onIncreaseVolume: () -> Void
     let onReload: () -> Void
     let onClear: () -> Void
 
@@ -39,6 +42,8 @@ struct FocusedTileControlsView: View {
             .disabled(!hasStream)
             .help(isMuted ? "ミュート解除" : "ミュート")
 
+            volumeControls
+
             controlButton(title: nil, systemImage: "arrow.clockwise", action: onReload)
                 .disabled(!hasStream)
                 .help("再読み込み")
@@ -52,6 +57,23 @@ struct FocusedTileControlsView: View {
         .padding(.vertical, 6)
         .background(.black.opacity(0.72))
         .foregroundStyle(.white)
+    }
+
+    private var volumeControls: some View {
+        HStack(spacing: 3) {
+            iconButton(systemImage: "minus", action: onDecreaseVolume)
+                .disabled(volumePercent <= VolumeLevel.minimum)
+                .help("音量を下げる")
+
+            Text("\(volumePercent)%")
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .frame(width: 42, height: 22)
+                .background(Color.white.opacity(0.12))
+
+            iconButton(systemImage: "plus", action: onIncreaseVolume)
+                .disabled(volumePercent >= VolumeLevel.maximum)
+                .help("音量を上げる")
+        }
     }
 
     private func audioButton(selection: AudioSelection) -> some View {
@@ -79,6 +101,15 @@ struct FocusedTileControlsView: View {
             .frame(minWidth: title == nil ? 24 : 0, minHeight: 22)
             .padding(.horizontal, title == nil ? 2 : 5)
             .background(Color.white.opacity(0.12))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func iconButton(systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .frame(width: 22, height: 22)
+                .background(Color.white.opacity(0.12))
         }
         .buttonStyle(.plain)
     }

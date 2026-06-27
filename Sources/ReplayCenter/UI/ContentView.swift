@@ -65,7 +65,7 @@ struct ContentView: View {
                 spacing: 0
             ) {
                 ForEach(Array(model.tiles.enumerated()), id: \.element.id) { index, tile in
-                    TileView(model: tile, focused: model.focusedIndex == index) {
+                    TileView(model: tile, focused: model.focusedIndex == index, volumePercent: model.volumePercent) {
                         model.focus(index)
                     } onOpenChannelSelector: {
                         openChannelSelector()
@@ -73,6 +73,10 @@ struct ContentView: View {
                         model.setFocusedAudioSelection(selection)
                     } onToggleMuted: {
                         model.toggleFocusedTileMuted()
+                    } onDecreaseVolume: {
+                        model.decreaseVolume()
+                    } onIncreaseVolume: {
+                        model.increaseVolume()
                     } onReload: {
                         model.reloadFocusedTile()
                     } onClear: {
@@ -125,6 +129,12 @@ struct ContentView: View {
             return .handled
         case ",":
             model.presentSettings()
+            return .handled
+        case "[":
+            model.decreaseVolume()
+            return .handled
+        case "]":
+            model.increaseVolume()
             return .handled
         case "+", "=":
             model.increaseTileCapacity()

@@ -6,6 +6,7 @@ struct SettingsView: View {
     let onClose: () -> Void
     @State private var selectedSection: SettingsSection = .general
     @State private var startupStreams: StartupStreamsMode
+    @State private var volumePercent: Int
     @State private var tileLayout: TileLayoutConfig
     @State private var favoriteChannelIDs: [Int]
     @State private var errorMessage: String?
@@ -19,6 +20,7 @@ struct SettingsView: View {
         self.channelCatalog = channelCatalog
         self.onClose = onClose
         _startupStreams = State(initialValue: model.settings.startupStreams ?? .configured)
+        _volumePercent = State(initialValue: VolumeLevel.normalized(model.settings.volumePercent))
         _tileLayout = State(initialValue: model.layout)
         _favoriteChannelIDs = State(initialValue: model.channelSettings.favoriteChannelIDs)
     }
@@ -164,8 +166,21 @@ struct SettingsView: View {
     private var playbackSection: some View {
         VStack(alignment: .leading, spacing: 18) {
             sectionTitle("再生")
-            Text("未実装")
-                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("音量")
+                    .font(.headline)
+                Stepper(
+                    value: $volumePercent,
+                    in: VolumeLevel.minimum...VolumeLevel.maximum,
+                    step: VolumeLevel.step
+                ) {
+                    Text("\(volumePercent)%")
+                        .font(.title3.monospacedDigit())
+                        .frame(width: 72, alignment: .leading)
+                }
+                .frame(maxWidth: 220, alignment: .leading)
+            }
         }
     }
 
@@ -261,7 +276,10 @@ struct SettingsView: View {
     }
 
     private func save() {
-        let settings = AppSettings(startupStreams: startupStreams)
+        let settings = AppSettings(
+            startupStreams: startupStreams,
+            volumePercent: VolumeLevel.normalized(volumePercent)
+        )
         guard model.applySettings(
             settings,
             tileLayout: tileLayout,
