@@ -4,6 +4,7 @@ import SwiftVLC
 struct TileView: View {
     @Bindable var model: TileModel
     let focused: Bool
+    let dropTarget: Bool
     let volumePercent: Int
     let onFocus: () -> Void
     let onOpenChannelSelector: () -> Void
@@ -44,36 +45,40 @@ struct TileView: View {
             }
             .overlay {
                 Rectangle()
-                    .stroke(focused ? Color.accentColor : Color.clear, lineWidth: 2)
+                    .stroke(focusStrokeColor, lineWidth: dropTarget ? 5 : 2)
             }
             .overlay(alignment: .bottom) {
-                if focused && isHovering {
-                    FocusedTileControlsView(
-                        hasStream: model.stream != nil,
-                        audioSelection: model.currentAudioSelection,
-                        audioStreamState: model.audioStreamState,
-                        isMuted: model.isMuted,
-                        volumePercent: volumePercent
-                    ) {
-                        onFocus()
-                        onOpenChannelSelector()
-                    } onSetAudioSelection: { selection in
-                        onFocus()
-                        onSetAudioSelection(selection)
-                    } onToggleMuted: {
-                        onToggleMuted()
-                    } onDecreaseVolume: {
-                        onDecreaseVolume()
-                    } onIncreaseVolume: {
-                        onIncreaseVolume()
-                    } onReload: {
-                        onFocus()
-                        onReload()
-                    } onClear: {
-                        onFocus()
-                        onClear()
+                if isHovering {
+                    if focused {
+                        FocusedTileControlsView(
+                            hasStream: model.stream != nil,
+                            audioSelection: model.currentAudioSelection,
+                            audioStreamState: model.audioStreamState,
+                            isMuted: model.isMuted,
+                            volumePercent: volumePercent
+                        ) {
+                            onOpenChannelSelector()
+                        } onSetAudioSelection: { selection in
+                            onFocus()
+                            onSetAudioSelection(selection)
+                        } onToggleMuted: {
+                            onToggleMuted()
+                        } onDecreaseVolume: {
+                            onDecreaseVolume()
+                        } onIncreaseVolume: {
+                            onIncreaseVolume()
+                        } onReload: {
+                            onFocus()
+                            onReload()
+                        } onClear: {
+                            onFocus()
+                            onClear()
+                        }
+                        .padding(.bottom, 8)
+                    } else {
+                        ChannelOnlyTileControlsView(onChangeChannel: onOpenChannelSelector)
+                            .padding(.bottom, 8)
                     }
-                    .padding(.bottom, 8)
                 }
             }
             .contentShape(Rectangle())
@@ -103,10 +108,16 @@ struct TileView: View {
         model.playbackState.isFailure ? .red : .white
     }
 
+    private var focusStrokeColor: Color {
+        if dropTarget {
+            return Color.white.opacity(0.86)
+        }
+        return focused ? Color.accentColor : Color.clear
+    }
+
     private var tileTapGesture: some Gesture {
         TapGesture(count: 2)
             .onEnded {
-                onFocus()
                 onOpenChannelSelector()
             }
             .exclusively(
@@ -115,5 +126,26 @@ struct TileView: View {
                         onFocus()
                     }
             )
+    }
+}
+
+private struct ChannelOnlyTileControlsView: View {
+    let onChangeChannel: () -> Void
+
+    var body: some View {
+        Button(action: onChangeChannel) {
+            HStack(spacing: 4) {
+                Image(systemName: "tv")
+                    .frame(width: 14)
+                Text("選局")
+            }
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .frame(minHeight: 24)
+            .background(.black.opacity(0.72))
+            .foregroundStyle(.white)
+        }
+        .buttonStyle(.plain)
+        .help("チャンネルを選択")
     }
 }

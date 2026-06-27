@@ -54,12 +54,69 @@ final class TileGridModel {
 
     func focus(_ index: Int) {
         guard tiles.indices.contains(index) else { return }
+        let targetIndex = promotedFocusIndex(for: index)
+        applyFocus(targetIndex)
+    }
+
+    @discardableResult
+    func swapTilesForDrag(sourceIndex: Int, targetIndex: Int) -> Bool {
+        guard layout.canSwapTilesForDrag(sourceIndex: sourceIndex, targetIndex: targetIndex) else {
+            return false
+        }
+        tiles.swapAt(sourceIndex, targetIndex)
+        applyFocus(focusedIndex)
+        return true
+    }
+
+    func canSwapTilesForDrag(sourceIndex: Int, targetIndex: Int?) -> Bool {
+        guard let targetIndex else { return false }
+        return layout.canSwapTilesForDrag(sourceIndex: sourceIndex, targetIndex: targetIndex)
+    }
+
+    private func applyFocus(_ index: Int) {
+        guard tiles.indices.contains(index) else { return }
         focusedIndex = index
         guard audioOnlyFocusedTile else { return }
 
         for (tileIndex, tile) in tiles.enumerated() {
             tile.setMuted(tileIndex != index)
         }
+    }
+
+    private func promotedFocusIndex(for index: Int) -> Int {
+        guard settings.keepFocusOnSingleLargeTile ?? true,
+              let largeIndex = layout.singleLargeTileIndex,
+              largeIndex != index,
+              tiles.indices.contains(largeIndex)
+        else {
+            return index
+        }
+        _ = swapTiles(index, largeIndex, focusedIndexAfterSwap: nil)
+        return largeIndex
+    }
+
+    @discardableResult
+    private func swapTiles(
+        _ sourceIndex: Int,
+        _ targetIndex: Int,
+        focusedIndexAfterSwap: Int?
+    ) -> Bool {
+        guard sourceIndex != targetIndex,
+              tiles.indices.contains(sourceIndex),
+              tiles.indices.contains(targetIndex)
+        else {
+            return false
+        }
+
+        tiles.swapAt(sourceIndex, targetIndex)
+        if let focusedIndexAfterSwap {
+            applyFocus(focusedIndexAfterSwap)
+        } else if focusedIndex == sourceIndex {
+            focusedIndex = targetIndex
+        } else if focusedIndex == targetIndex {
+            focusedIndex = sourceIndex
+        }
+        return true
     }
 
     func setFocusedAudioSelection(_ selection: AudioSelection) {
@@ -96,7 +153,11 @@ final class TileGridModel {
     }
 
     func playFocusedChannel(_ channel: EPGStationChannel) {
-        guard tiles.indices.contains(focusedIndex), let epgStationClient else { return }
+        playChannel(channel, at: focusedIndex, focusAfterPlay: true)
+    }
+
+    func playChannel(_ channel: EPGStationChannel, at index: Int, focusAfterPlay: Bool = false) {
+        guard tiles.indices.contains(index), let epgStationClient else { return }
 
         let url = epgStationClient.liveStreamURL(
             channelID: channel.id,
@@ -111,8 +172,10 @@ final class TileGridModel {
             deinterlace: nil,
             mediaOptions: nil
         )
-        tiles[focusedIndex].play(stream: stream)
-        focus(focusedIndex)
+        tiles[index].play(stream: stream)
+        if focusAfterPlay {
+            focus(index)
+        }
     }
 
     func clearFocusedTile() {
@@ -159,6 +222,7 @@ final class TileGridModel {
         let normalizedVolume = VolumeLevel.normalized(settings.volumePercent)
         var settings = settings
         settings.volumePercent = normalizedVolume
+        settings.keepFocusOnSingleLargeTile = settings.keepFocusOnSingleLargeTile ?? true
         self.settings = settings
         self.channelSettings = channelSettings.normalized
         config = config.applying(settings)
@@ -166,6 +230,7 @@ final class TileGridModel {
         for tile in tiles {
             tile.setVolumePercent(normalizedVolume)
         }
+        focus(focusedIndex)
         onSettingsChanged?(settings)
         return true
     }

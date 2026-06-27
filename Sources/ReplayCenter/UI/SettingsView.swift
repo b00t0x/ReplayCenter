@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var volumePercent: Int
     @State private var tileLayout: TileLayoutConfig
     @State private var tileLayoutCategory: TileLayoutCategory
+    @State private var keepFocusOnSingleLargeTile: Bool
     @State private var favoriteChannelIDs: [Int]
     @State private var errorMessage: String?
 
@@ -24,6 +25,9 @@ struct SettingsView: View {
         _volumePercent = State(initialValue: VolumeLevel.normalized(model.settings.volumePercent))
         _tileLayout = State(initialValue: model.layout)
         _tileLayoutCategory = State(initialValue: TileLayoutCategory.category(for: model.layout))
+        _keepFocusOnSingleLargeTile = State(
+            initialValue: model.settings.keepFocusOnSingleLargeTile ?? true
+        )
         _favoriteChannelIDs = State(initialValue: model.channelSettings.favoriteChannelIDs)
     }
 
@@ -190,6 +194,8 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             sectionTitle("タイル")
 
+            Toggle("単一ラージを常にフォーカス", isOn: $keepFocusOnSingleLargeTile)
+
             VStack(alignment: .leading, spacing: 10) {
                 Text("配置")
                     .font(.headline)
@@ -295,7 +301,8 @@ struct SettingsView: View {
     private func save() {
         let settings = AppSettings(
             startupStreams: startupStreams,
-            volumePercent: VolumeLevel.normalized(volumePercent)
+            volumePercent: VolumeLevel.normalized(volumePercent),
+            keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile
         )
         guard model.applySettings(
             settings,

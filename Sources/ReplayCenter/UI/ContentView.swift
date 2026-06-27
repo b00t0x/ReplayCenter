@@ -5,6 +5,10 @@ struct ContentView: View {
     let channelCatalog: ChannelCatalogModel?
     let onChannelSelectorPresentationChanged: (Bool) -> Void
     @State private var isChannelSelectorPresented = false
+    @State private var channelSelectionTargetIndex: Int?
+    @State private var draggingTileIndex: Int?
+    @State private var dragTranslation: CGSize = .zero
+    @State private var dragTargetIndex: Int?
 
     var body: some View {
         Group {
@@ -26,7 +30,10 @@ struct ContentView: View {
                     catalog: channelCatalog,
                     channelSettings: model.channelSettings
                 ) { item in
-                    model.playFocusedChannel(item.channel)
+                    model.playChannel(
+                        item.channel,
+                        at: channelSelectionTargetIndex ?? model.focusedIndex
+                    )
                     closeChannelSelector()
                 } onCancel: {
                     closeChannelSelector()
@@ -63,10 +70,16 @@ struct ContentView: View {
             ZStack(alignment: .topLeading) {
                 ForEach(Array(model.tiles.enumerated()), id: \.element.id) { index, tile in
                     if let placement = model.layout.placement(at: index) {
-                        TileView(model: tile, focused: model.focusedIndex == index, volumePercent: model.volumePercent) {
+                        let isDragging = draggingTileIndex == index
+                        TileView(
+                            model: tile,
+                            focused: model.focusedIndex == index,
+                            dropTarget: dragTargetIndex == index,
+                            volumePercent: model.volumePercent
+                        ) {
                             model.focus(index)
                         } onOpenChannelSelector: {
-                            openChannelSelector()
+                            openChannelSelector(for: index)
                         } onSetAudioSelection: { selection in
                             model.setFocusedAudioSelection(selection)
                         } onToggleMuted: {
@@ -88,7 +101,25 @@ struct ContentView: View {
                             x: cellWidth * (CGFloat(placement.x) + CGFloat(placement.width) / 2),
                             y: cellHeight * (CGFloat(placement.y) + CGFloat(placement.height) / 2)
                         )
+                        .offset(isDragging ? dragTranslation : .zero)
+                        .scaleEffect(isDragging ? 1.015 : 1)
+                        .shadow(color: isDragging ? .black.opacity(0.45) : .clear, radius: 14)
+                        .zIndex(tileZIndex(index: index, isDragging: isDragging))
+                        .highPriorityGesture(
+                            tileDragGesture(
+                                sourceIndex: index,
+                                sourcePlacement: placement,
+                                cellWidth: cellWidth,
+                                cellHeight: cellHeight
+                            )
+                        )
                     }
+                }
+
+                if draggingTileIndex != nil {
+                    Color.black.opacity(0.54)
+                        .allowsHitTesting(false)
+                        .zIndex(8)
                 }
             }
             .frame(width: gridSize.width, height: gridSize.height, alignment: .topLeading)
@@ -106,6 +137,88 @@ struct ContentView: View {
         } else {
             return CGSize(width: availableSize.width, height: availableSize.width / aspect)
         }
+    }
+
+    private func tileZIndex(index: Int, isDragging: Bool) -> Double {
+        if isDragging {
+            return 10
+        }
+        if dragTargetIndex == index {
+            return 9
+        }
+        if model.focusedIndex == index {
+            return 1
+        }
+        return 0
+    }
+
+    private func tileDragGesture(
+        sourceIndex: Int,
+        sourcePlacement: TilePlacement,
+        cellWidth: CGFloat,
+        cellHeight: CGFloat
+    ) -> some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                guard !isChannelSelectorPresented, !model.isSettingsPresented else { return }
+                draggingTileIndex = sourceIndex
+                dragTranslation = value.translation
+                dragTargetIndex = dropTargetIndex(
+                    sourceIndex: sourceIndex,
+                    sourcePlacement: sourcePlacement,
+                    translation: value.translation,
+                    cellWidth: cellWidth,
+                    cellHeight: cellHeight
+                )
+            }
+            .onEnded { value in
+                defer { resetDragState() }
+                guard !isChannelSelectorPresented, !model.isSettingsPresented else { return }
+                guard let targetIndex = dropTargetIndex(
+                    sourceIndex: sourceIndex,
+                    sourcePlacement: sourcePlacement,
+                    translation: value.translation,
+                    cellWidth: cellWidth,
+                    cellHeight: cellHeight
+                ) else {
+                    return
+                }
+                model.swapTilesForDrag(sourceIndex: sourceIndex, targetIndex: targetIndex)
+            }
+    }
+
+    private func dropTargetIndex(
+        sourceIndex: Int,
+        sourcePlacement: TilePlacement,
+        translation: CGSize,
+        cellWidth: CGFloat,
+        cellHeight: CGFloat
+    ) -> Int? {
+        guard cellWidth > 0, cellHeight > 0 else { return nil }
+        let centerX = cellWidth * (CGFloat(sourcePlacement.x) + CGFloat(sourcePlacement.width) / 2)
+            + translation.width
+        let centerY = cellHeight * (CGFloat(sourcePlacement.y) + CGFloat(sourcePlacement.height) / 2)
+            + translation.height
+        guard centerX >= 0, centerY >= 0 else { return nil }
+        let cellX = Int(centerX / cellWidth)
+        let cellY = Int(centerY / cellHeight)
+        let targetIndex = model.layout.placements.indices.first { index in
+            let placement = model.layout.placements[index]
+            return cellX >= placement.x
+                && cellX < placement.maxX
+                && cellY >= placement.y
+                && cellY < placement.maxY
+        }
+        guard model.canSwapTilesForDrag(sourceIndex: sourceIndex, targetIndex: targetIndex) else {
+            return nil
+        }
+        return targetIndex
+    }
+
+    private func resetDragState() {
+        draggingTileIndex = nil
+        dragTranslation = .zero
+        dragTargetIndex = nil
     }
 
     private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
@@ -131,7 +244,7 @@ struct ContentView: View {
             model.setFocusedAudioSelection(.secondary)
             return .handled
         case "c":
-            openChannelSelector()
+            openChannelSelector(for: model.focusedIndex)
             return .handled
         case ",":
             model.presentSettings()
@@ -153,9 +266,10 @@ struct ContentView: View {
         }
     }
 
-    private func openChannelSelector() {
+    private func openChannelSelector(for index: Int) {
         guard channelCatalog != nil else { return }
         guard !isChannelSelectorPresented else { return }
+        channelSelectionTargetIndex = model.tiles.indices.contains(index) ? index : model.focusedIndex
         isChannelSelectorPresented = true
         onChannelSelectorPresentationChanged(true)
     }
@@ -163,6 +277,7 @@ struct ContentView: View {
     private func closeChannelSelector() {
         guard isChannelSelectorPresented else { return }
         isChannelSelectorPresented = false
+        channelSelectionTargetIndex = nil
         onChannelSelectorPresentationChanged(false)
     }
 }

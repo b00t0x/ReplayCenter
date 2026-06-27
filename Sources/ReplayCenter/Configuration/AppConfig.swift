@@ -16,6 +16,7 @@ struct AppConfig: Decodable {
     var audioMode: AudioMode?
     var tileLayout: TileLayoutConfig?
     var startupStreams: StartupStreamsMode?
+    var keepFocusOnSingleLargeTile: Bool?
     var streams: [StreamConfig]
 
     static let empty = AppConfig(
@@ -34,6 +35,7 @@ struct AppConfig: Decodable {
         audioMode: .stereo,
         tileLayout: nil,
         startupStreams: .configured,
+        keepFocusOnSingleLargeTile: true,
         streams: []
     )
 
@@ -56,6 +58,7 @@ struct AppConfig: Decodable {
             "audioMode=\(audioMode?.rawValue ?? "<nil>")",
             "tileLayout=\(tileLayout?.summary ?? "<auto>")",
             "startupStreams=\(startupStreams?.rawValue ?? "<nil>")",
+            "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")",
             "dualMonoFilter=\((dualMonoFilter ?? .default).summary)",
             "vlcArguments=\(vlcArguments ?? [])",
             "mediaOptions=\(mediaOptions ?? [])"
@@ -66,27 +69,37 @@ struct AppConfig: Decodable {
 struct AppSettings: Codable, Equatable {
     var startupStreams: StartupStreamsMode?
     var volumePercent: Int?
+    var keepFocusOnSingleLargeTile: Bool?
 
-    static let empty = AppSettings(startupStreams: nil, volumePercent: nil)
+    static let empty = AppSettings(
+        startupStreams: nil,
+        volumePercent: nil,
+        keepFocusOnSingleLargeTile: nil
+    )
 
     static func defaults(from config: AppConfig) -> AppSettings {
         AppSettings(
             startupStreams: config.startupStreams ?? .configured,
-            volumePercent: VolumeLevel.normalized(config.volumePercent)
+            volumePercent: VolumeLevel.normalized(config.volumePercent),
+            keepFocusOnSingleLargeTile: config.keepFocusOnSingleLargeTile ?? true
         )
     }
 
     func fillingDefaults(from config: AppConfig) -> AppSettings {
         AppSettings(
             startupStreams: startupStreams ?? config.startupStreams ?? .configured,
-            volumePercent: VolumeLevel.normalized(volumePercent ?? config.volumePercent)
+            volumePercent: VolumeLevel.normalized(volumePercent ?? config.volumePercent),
+            keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile
+                ?? config.keepFocusOnSingleLargeTile
+                ?? true
         )
     }
 
     var summary: String {
         [
             "startupStreams=\(startupStreams?.rawValue ?? "<nil>")",
-            "volumePercent=\(volumePercent.map(String.init) ?? "<nil>")"
+            "volumePercent=\(volumePercent.map(String.init) ?? "<nil>")",
+            "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")"
         ].joined(separator: " ")
     }
 }
@@ -100,6 +113,9 @@ extension AppConfig {
         }
         if let volumePercent = settings.volumePercent {
             config.volumePercent = VolumeLevel.normalized(volumePercent)
+        }
+        if let keepFocusOnSingleLargeTile = settings.keepFocusOnSingleLargeTile {
+            config.keepFocusOnSingleLargeTile = keepFocusOnSingleLargeTile
         }
         return config
     }
@@ -158,6 +174,11 @@ struct TilePlacement: Codable, Equatable, Hashable {
 
     var maxX: Int { x + width }
     var maxY: Int { y + height }
+    var spansMultipleCells: Bool { width > 1 || height > 1 }
+
+    func hasSameSize(as other: TilePlacement) -> Bool {
+        width == other.width && height == other.height
+    }
 }
 
 struct TileLayoutConfig: Codable, Equatable, Hashable {
@@ -352,6 +373,12 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
         placements.count
     }
 
+    var singleLargeTileIndex: Int? {
+        let indices = placements.indices.filter { placements[$0].spansMultipleCells }
+        guard indices.count == 1 else { return nil }
+        return indices[0]
+    }
+
     var gridAspectRatio: CGSize {
         CGSize(width: columns * 16, height: rows * 9)
     }
@@ -427,6 +454,16 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
         columns == other.columns
             && rows == other.rows
             && placements == other.placements
+    }
+
+    func canSwapTilesForDrag(sourceIndex: Int, targetIndex: Int) -> Bool {
+        guard sourceIndex != targetIndex,
+              placements.indices.contains(sourceIndex),
+              placements.indices.contains(targetIndex)
+        else {
+            return false
+        }
+        return placements[sourceIndex].hasSameSize(as: placements[targetIndex])
     }
 
     private var isUniformGrid: Bool {

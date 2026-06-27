@@ -13,7 +13,10 @@ API client layer for channel selection.
 Current provisional keyboard and mouse controls for development:
 
 - Click a tile to focus it.
-- Press `C` or double-click a tile to choose a channel for the focused tile.
+- Drag a tile onto another tile of the same size to swap them.
+- Press `C` to choose a channel for the focused tile.
+- Double-click a tile, or use its hover `選局` button, to choose a channel for
+  that tile without moving focus first.
 - Press `Delete` or `Forward Delete` to clear the focused tile.
 - Press `+` / `=` or `-` to grow or shrink the tile layout.
 - Press `[` or `]` to change the global volume in 5% steps.
@@ -54,6 +57,8 @@ Important defaults:
 - `liveStreamMode`: EPGStation live stream mode, with `0` commonly used for unconverted `m2ts`
 - `tileLayout`: fixed tile grid, for example `{ "columns": 3, "rows": 2 }`
 - `startupStreams`: `configured` starts streams from config, `empty` starts with unassigned tiles
+- `keepFocusOnSingleLargeTile`: when a layout has exactly one large tile,
+  focusing a small tile swaps it into the large tile. Defaults to `true`.
 - `deinterlace`: `yadif`
 - `networkCachingMs`: `1000`
 - `volumePercent`: global playback volume, clamped to `0` through `100` and
