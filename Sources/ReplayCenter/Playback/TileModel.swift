@@ -9,7 +9,7 @@ final class TileModel: Identifiable {
     private(set) var stream: StreamConfig?
     private(set) var playbackState: TilePlaybackState
     private(set) var audioStreamState: AudioStreamState
-    private(set) var currentAudioMode: AudioMode
+    private(set) var currentAudioSelection: AudioSelection
     private(set) var isMuted: Bool
     let player: Player
     private let config: AppConfig
@@ -23,10 +23,10 @@ final class TileModel: Identifiable {
         self.player = Player(instance: instance)
         playbackState = .idle
         audioStreamState = .unknown
-        currentAudioMode = stream?.audioMode ?? config.audioMode ?? .stereo
+        currentAudioSelection = AudioSelection(audioMode: stream?.audioMode ?? config.audioMode ?? .stereo)
         isMuted = stream?.muted ?? config.startMuted ?? true
         player.isMuted = isMuted
-        player.stereoMode = currentAudioMode.stereoMode
+        player.stereoMode = currentAudioSelection.filterAudioMode.stereoMode
     }
 
     func startIfNeeded() {
@@ -59,9 +59,10 @@ final class TileModel: Identifiable {
         player.isMuted = muted
     }
 
-    func setAudioMode(_ mode: AudioMode) {
-        guard audioStreamState.supportsCurrentAudioModeControls else { return }
-        currentAudioMode = mode
+    func setAudioSelection(_ selection: AudioSelection) {
+        guard audioStreamState.supportsAudioSelectionControls else { return }
+        currentAudioSelection = selection
+        let mode = selection.filterAudioMode
         player.stereoMode = mode.stereoMode
         dualMonoFilterPipeline?.setAudioMode(mode)
     }
@@ -89,8 +90,8 @@ final class TileModel: Identifiable {
             log("invalid url=\(stream.url)")
             return
         }
-        currentAudioMode = stream.audioMode ?? config.audioMode ?? .stereo
-        player.stereoMode = currentAudioMode.stereoMode
+        currentAudioSelection = AudioSelection(audioMode: stream.audioMode ?? config.audioMode ?? .stereo)
+        player.stereoMode = currentAudioSelection.filterAudioMode.stereoMode
         playbackState = .starting
         audioStreamState = .unknown
         activePipelineID = nil
@@ -111,7 +112,7 @@ final class TileModel: Identifiable {
             }
             activePipelineID = pipelineID
             dualMonoFilterPipeline = pipeline
-            let media = try pipeline.start(initialMode: currentAudioMode)
+            let media = try pipeline.start(initialMode: currentAudioSelection.filterAudioMode)
             if let networkCachingMs = config.networkCachingMs {
                 media.addOption(":network-caching=\(networkCachingMs)")
                 media.addOption(":live-caching=\(networkCachingMs)")
@@ -126,7 +127,7 @@ final class TileModel: Identifiable {
             applyDeinterlaceIfNeeded()
             try player.play(media)
             playbackState = .playing
-            log("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel) audioMode=\(currentAudioMode.rawValue) filter=\((config.dualMonoFilter ?? .default).summary)")
+            log("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel) audioSelection=\(currentAudioSelection.rawValue) filter=\((config.dualMonoFilter ?? .default).summary)")
         } catch {
             playbackState = .failed(error.localizedDescription)
             activePipelineID = nil
@@ -144,6 +145,9 @@ final class TileModel: Identifiable {
             guard audioStreamState != state else { return }
             audioStreamState = state
             log("audio state changed state=\(state.rawValue)")
+            if state.supportsAudioSelectionControls {
+                dualMonoFilterPipeline?.setAudioMode(currentAudioSelection.filterAudioMode)
+            }
         case let .curlExited(status, reason, stderr):
             let detail = "curl exited status=\(status) reason=\(reason)"
             if let stderr {

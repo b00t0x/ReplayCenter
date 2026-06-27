@@ -2,11 +2,11 @@ import SwiftUI
 
 struct FocusedTileControlsView: View {
     let hasStream: Bool
-    let audioMode: AudioMode
+    let audioSelection: AudioSelection
     let audioStreamState: AudioStreamState
     let isMuted: Bool
     let onChangeChannel: () -> Void
-    let onSetAudioMode: (AudioMode) -> Void
+    let onSetAudioSelection: (AudioSelection) -> Void
     let onToggleMuted: () -> Void
     let onReload: () -> Void
     let onClear: () -> Void
@@ -23,12 +23,10 @@ struct FocusedTileControlsView: View {
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 54, alignment: .leading)
 
-            audioButton(title: "S", mode: .stereo)
-                .help("ステレオ")
-            audioButton(title: "L", mode: .left)
-                .help("左音声")
-            audioButton(title: "R", mode: .right)
-                .help("右音声")
+            audioButton(selection: .primary)
+                .help("主音声")
+            audioButton(selection: .secondary)
+                .help("副音声")
 
             Divider()
                 .frame(height: 18)
@@ -56,17 +54,17 @@ struct FocusedTileControlsView: View {
         .foregroundStyle(.white)
     }
 
-    private func audioButton(title: String, mode: AudioMode) -> some View {
+    private func audioButton(selection: AudioSelection) -> some View {
         Button {
-            onSetAudioMode(mode)
+            onSetAudioSelection(selection)
         } label: {
-            Text(title)
+            Text(selection.displayText)
                 .font(.caption.weight(.semibold))
-                .frame(width: 22, height: 22)
-                .background(audioMode == mode ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.12))
+                .frame(width: 28, height: 22)
+                .background(audioSelection == selection ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.12))
         }
         .buttonStyle(.plain)
-        .disabled(!hasStream || !audioStreamState.supportsCurrentAudioModeControls)
+        .disabled(!hasStream || !audioStreamState.supportsAudioSelectionControls)
     }
 
     private func controlButton(title: String?, systemImage: String, action: @escaping () -> Void) -> some View {

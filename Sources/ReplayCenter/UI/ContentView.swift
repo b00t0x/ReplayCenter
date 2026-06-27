@@ -69,8 +69,8 @@ struct ContentView: View {
                         model.focus(index)
                     } onOpenChannelSelector: {
                         openChannelSelector()
-                    } onSetAudioMode: { mode in
-                        model.setFocusedAudioMode(mode)
+                    } onSetAudioSelection: { selection in
+                        model.setFocusedAudioSelection(selection)
                     } onToggleMuted: {
                         model.toggleFocusedTileMuted()
                     } onReload: {
@@ -114,14 +114,11 @@ struct ContentView: View {
         }
 
         switch characters {
-        case "s":
-            model.setFocusedAudioMode(.stereo)
-            return .handled
         case "l":
-            model.setFocusedAudioMode(.left)
+            model.setFocusedAudioSelection(.primary)
             return .handled
         case "r":
-            model.setFocusedAudioMode(.right)
+            model.setFocusedAudioSelection(.secondary)
             return .handled
         case "c":
             openChannelSelector()

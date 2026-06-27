@@ -6,7 +6,7 @@ struct TileView: View {
     let focused: Bool
     let onFocus: () -> Void
     let onOpenChannelSelector: () -> Void
-    let onSetAudioMode: (AudioMode) -> Void
+    let onSetAudioSelection: (AudioSelection) -> Void
     let onToggleMuted: () -> Void
     let onReload: () -> Void
     let onClear: () -> Void
@@ -47,15 +47,15 @@ struct TileView: View {
                 if focused && isHovering {
                     FocusedTileControlsView(
                         hasStream: model.stream != nil,
-                        audioMode: model.currentAudioMode,
+                        audioSelection: model.currentAudioSelection,
                         audioStreamState: model.audioStreamState,
                         isMuted: model.isMuted
                     ) {
                         onFocus()
                         onOpenChannelSelector()
-                    } onSetAudioMode: { mode in
+                    } onSetAudioSelection: { selection in
                         onFocus()
-                        onSetAudioMode(mode)
+                        onSetAudioSelection(selection)
                     } onToggleMuted: {
                         onToggleMuted()
                     } onReload: {

@@ -16,6 +16,8 @@ constexpr int SYNC_BYTE = 0x47;
 constexpr int PID_PAT = 0x0000;
 constexpr int STREAM_TYPE_AAC_ADTS = 0x0f;
 
+void writeAll(FILE *out, const uint8_t *data, size_t size);
+
 enum class AudioMode : int {
     Stereo = 0,
     Left = 1,
@@ -221,6 +223,121 @@ bool parsePmtSection(const uint8_t *section, int sectionSize, std::vector<int> *
         offset += 5 + esInfoLength;
     }
     return !audioPids->empty();
+}
+
+uint32_t mpegCrc32(const uint8_t *data, size_t size)
+{
+    uint32_t crc = 0xffffffff;
+    for (size_t index = 0; index < size; ++index) {
+        crc ^= static_cast<uint32_t>(data[index]) << 24;
+        for (int bit = 0; bit < 8; ++bit) {
+            crc = (crc & 0x80000000) ? (crc << 1) ^ 0x04c11db7 : (crc << 1);
+        }
+    }
+    return crc;
+}
+
+bool containsPid(const std::vector<int> &pids, int pid)
+{
+    for (int item : pids) {
+        if (item == pid) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<uint8_t> buildSelectedPmtSection(
+    const std::vector<uint8_t> &section,
+    size_t sectionSize,
+    const std::vector<int> &audioPids,
+    int selectedAudioPid,
+    int outputAudioPid
+)
+{
+    if (sectionSize > section.size() || sectionSize < 16 || audioPids.size() < 2 || outputAudioPid < 0) {
+        return std::vector<uint8_t>(section.begin(), section.begin() + sectionSize);
+    }
+
+    int sectionLength = ((section[1] & 0x0f) << 8) | section[2];
+    if (sectionLength + 3 > static_cast<int>(sectionSize) || sectionLength < 13) {
+        return std::vector<uint8_t>(section.begin(), section.begin() + sectionSize);
+    }
+
+    int programInfoLength = ((section[10] & 0x0f) << 8) | section[11];
+    int entriesOffset = 12 + programInfoLength;
+    int entriesEnd = 3 + sectionLength - 4;
+    if (entriesOffset > entriesEnd || entriesEnd > static_cast<int>(sectionSize)) {
+        return std::vector<uint8_t>(section.begin(), section.begin() + sectionSize);
+    }
+
+    std::vector<uint8_t> output;
+    output.insert(output.end(), section.begin(), section.begin() + entriesOffset);
+
+    int offset = entriesOffset;
+    while (offset + 5 <= entriesEnd) {
+        int streamType = section[offset];
+        int elementaryPid = ((section[offset + 1] & 0x1f) << 8) | section[offset + 2];
+        int esInfoLength = ((section[offset + 3] & 0x0f) << 8) | section[offset + 4];
+        int entryEnd = offset + 5 + esInfoLength;
+        if (entryEnd > entriesEnd) {
+            return std::vector<uint8_t>(section.begin(), section.begin() + sectionSize);
+        }
+
+        bool isAacAudio = streamType == STREAM_TYPE_AAC_ADTS && containsPid(audioPids, elementaryPid);
+        if (!isAacAudio) {
+            output.insert(output.end(), section.begin() + offset, section.begin() + entryEnd);
+        } else if (elementaryPid == selectedAudioPid) {
+            size_t entryOutputOffset = output.size();
+            output.insert(output.end(), section.begin() + offset, section.begin() + entryEnd);
+            output[entryOutputOffset + 1] = static_cast<uint8_t>((output[entryOutputOffset + 1] & 0xe0) | ((outputAudioPid >> 8) & 0x1f));
+            output[entryOutputOffset + 2] = static_cast<uint8_t>(outputAudioPid & 0xff);
+        }
+        offset = entryEnd;
+    }
+
+    int newSectionLength = static_cast<int>(output.size() + 4 - 3);
+    output[1] = static_cast<uint8_t>((output[1] & 0xf0) | ((newSectionLength >> 8) & 0x0f));
+    output[2] = static_cast<uint8_t>(newSectionLength & 0xff);
+
+    uint32_t crc = mpegCrc32(output.data(), output.size());
+    output.push_back(static_cast<uint8_t>((crc >> 24) & 0xff));
+    output.push_back(static_cast<uint8_t>((crc >> 16) & 0xff));
+    output.push_back(static_cast<uint8_t>((crc >> 8) & 0xff));
+    output.push_back(static_cast<uint8_t>(crc & 0xff));
+    return output;
+}
+
+void writePsiSection(FILE *out, int pid, const std::vector<uint8_t> &section, int *counter)
+{
+    size_t offset = 0;
+    bool first = true;
+    while (offset < section.size()) {
+        uint8_t packet[TS_PACKET_SIZE];
+        std::memset(packet, 0xff, sizeof(packet));
+        packet[0] = SYNC_BYTE;
+        packet[1] = static_cast<uint8_t>(((first ? 0x40 : 0x00) | ((pid >> 8) & 0x1f)));
+        packet[2] = static_cast<uint8_t>(pid & 0xff);
+        packet[3] = static_cast<uint8_t>(0x10 | (*counter & 0x0f));
+
+        int payloadStart = 4;
+        if (first) {
+            packet[payloadStart++] = 0x00;
+        }
+
+        size_t payloadSize = TS_PACKET_SIZE - static_cast<size_t>(payloadStart);
+        size_t remaining = section.size() - offset;
+        if (payloadSize > remaining) {
+            payloadSize = remaining;
+        }
+        std::memcpy(packet + payloadStart, section.data() + offset, payloadSize);
+        writeAll(out, packet, sizeof(packet));
+
+        *counter = (*counter + 1) & 0x0f;
+        offset += payloadSize;
+        first = false;
+    }
+    fflush(out);
 }
 
 void writeAll(FILE *out, const uint8_t *data, size_t size)
@@ -452,6 +569,7 @@ public:
     {
         int pid = pidOf(packet);
         int offset = payloadOffset(packet);
+        updateSelectedAudioPid(out);
 
         if (pid == PID_PAT && offset >= 0) {
             int pmtPid = -1;
@@ -461,29 +579,49 @@ public:
                 pmtSectionExpectedSize_ = 0;
                 std::fprintf(stderr, "[filter] pmt pid=0x%x\n", pmtPid_);
             }
+            writeAll(out, packet, TS_PACKET_SIZE);
+            return;
         } else if (pid == pmtPid_ && offset >= 0) {
             std::vector<int> audioPids;
+            if (payloadUnitStart(packet)) {
+                pmtOutputCounter_ = continuityCounter(packet);
+            }
             if (appendPsiSection(packet, offset, &pmtSection_, &pmtSectionExpectedSize_)
                 && parsePmtSection(
                     pmtSection_.data(),
                     static_cast<int>(pmtSectionExpectedSize_),
                     &audioPids
-                )
-                && audioPids_ != audioPids) {
-                audioPids_ = audioPids;
-                if (!forcedAudioPid_) {
-                    audioPid_ = audioPids_[0];
+                )) {
+                if (audioPids_ != audioPids) {
+                    audioPids_ = audioPids;
+                    if (!forcedAudioPid_) {
+                        int index = selectedAudioIndex(currentMode());
+                        if (index >= static_cast<int>(audioPids_.size())) {
+                            index = 0;
+                        }
+                        audioPid_ = audioPids_[index];
+                    }
+                    aacWorkspace_.clear();
+                    isDualMono_ = false;
+                    std::fprintf(stderr, "[filter] audio pids=%s selected=0x%x\n", audioPidsLabel().c_str(), audioPid_);
+                    emitAudioStatus();
                 }
-                aacWorkspace_.clear();
-                isDualMono_ = false;
-                std::fprintf(stderr, "[filter] audio pids=%s selected=0x%x\n", audioPidsLabel().c_str(), audioPid_);
-                emitAudioStatus();
+                writeSelectedPmt(out);
             }
+            return;
+        }
+
+        if (!forcedAudioPid_ && audioPids_.empty()) {
+            return;
         }
 
         if (pid == audioPid_) {
             audioWriter_.setInitialCounter(continuityCounter(packet));
             processAudioPacket(packet, offset, out);
+            return;
+        }
+
+        if (isKnownAudioPid(pid)) {
             return;
         }
 
@@ -546,7 +684,7 @@ private:
         );
         logTransform(converted, currentPes_, transformed, mode);
         emitAudioStatus();
-        audioWriter_.writePes(out, audioPid_, transformed);
+        audioWriter_.writePes(out, outputAudioPid(), transformed);
         currentPes_.clear();
     }
 
@@ -559,6 +697,79 @@ private:
         isDualMono_ = false;
         lastMode_ = mode;
         std::fprintf(stderr, "[filter] audio mode state reset mode=%d\n", static_cast<int>(mode));
+    }
+
+    void updateSelectedAudioPid(FILE *out)
+    {
+        AudioMode mode = currentMode();
+        if (mode == lastSelectionMode_) {
+            return;
+        }
+
+        lastSelectionMode_ = mode;
+        if (audioPids_.empty() || forcedAudioPid_) {
+            emitAudioStatus();
+            return;
+        }
+
+        int index = selectedAudioIndex(mode);
+        if (index >= static_cast<int>(audioPids_.size())) {
+            index = 0;
+        }
+
+        int selectedPid = audioPids_[index];
+        if (audioPid_ == selectedPid) {
+            emitAudioStatus();
+            return;
+        }
+
+        audioPid_ = selectedPid;
+        currentPes_.clear();
+        aacWorkspace_.clear();
+        isDualMono_ = false;
+        std::fprintf(stderr, "[filter] selected audio pid=0x%x mode=%d\n", audioPid_, static_cast<int>(mode));
+        emitAudioStatus();
+        writeSelectedPmt(out);
+    }
+
+    int selectedAudioIndex(AudioMode mode) const
+    {
+        switch (mode) {
+        case AudioMode::Right:
+            return 1;
+        case AudioMode::Stereo:
+        case AudioMode::Left:
+            return 0;
+        }
+    }
+
+    bool isKnownAudioPid(int pid) const
+    {
+        return containsPid(audioPids_, pid);
+    }
+
+    int outputAudioPid() const
+    {
+        if (audioPids_.size() >= 2 && !forcedAudioPid_) {
+            return audioPids_[0];
+        }
+        return audioPid_;
+    }
+
+    void writeSelectedPmt(FILE *out)
+    {
+        if (pmtPid_ < 0 || pmtSection_.empty() || pmtSectionExpectedSize_ == 0) {
+            return;
+        }
+
+        std::vector<uint8_t> selectedPmt = buildSelectedPmtSection(
+            pmtSection_,
+            pmtSectionExpectedSize_,
+            audioPids_,
+            audioPid_,
+            outputAudioPid()
+        );
+        writePsiSection(out, pmtPid_, selectedPmt, &pmtOutputCounter_);
     }
 
     void logTransform(
@@ -609,12 +820,13 @@ private:
     void emitAudioStatus()
     {
         std::string state = audioStateLabel();
-        if (state == lastAudioState_ && audioPids_ == lastStatusAudioPids_) {
+        if (state == lastAudioState_ && audioPids_ == lastStatusAudioPids_ && audioPid_ == lastStatusSelectedAudioPid_) {
             return;
         }
 
         lastAudioState_ = state;
         lastStatusAudioPids_ = audioPids_;
+        lastStatusSelectedAudioPid_ = audioPid_;
         std::fprintf(
             stderr,
             "[filter-status] audioState=%s audioPids=%s selectedAudioPid=0x%x\n",
@@ -658,8 +870,10 @@ private:
     bool forcedAudioPid_ = false;
     std::vector<uint8_t> pmtSection_;
     size_t pmtSectionExpectedSize_ = 0;
+    int pmtOutputCounter_ = 0;
     std::vector<int> audioPids_;
     std::vector<int> lastStatusAudioPids_;
+    int lastStatusSelectedAudioPid_ = -1;
     std::string lastAudioState_;
     bool muxSelectedToStereo_ = true;
     std::vector<uint8_t> currentPes_;
@@ -667,6 +881,7 @@ private:
     TsWriter audioWriter_;
     bool isDualMono_ = false;
     AudioMode lastMode_;
+    AudioMode lastSelectionMode_ = AudioMode::Stereo;
     size_t convertedPesCount_ = 0;
     size_t passthroughPesCount_ = 0;
 };

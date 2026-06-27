@@ -56,10 +56,10 @@ final class TileGridModel {
         }
     }
 
-    func setFocusedAudioMode(_ mode: AudioMode) {
+    func setFocusedAudioSelection(_ selection: AudioSelection) {
         guard tiles.indices.contains(focusedIndex) else { return }
         guard tiles[focusedIndex].stream != nil else { return }
-        tiles[focusedIndex].setAudioMode(mode)
+        tiles[focusedIndex].setAudioSelection(selection)
     }
 
     func toggleFocusedTileMuted() {

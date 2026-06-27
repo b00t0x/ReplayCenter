@@ -19,7 +19,7 @@ enum AudioStreamState: String, Sendable {
         }
     }
 
-    var supportsCurrentAudioModeControls: Bool {
-        self == .dualMono
+    var supportsAudioSelectionControls: Bool {
+        self == .dualMono || self == .multiStream
     }
 }

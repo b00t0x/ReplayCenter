@@ -6,9 +6,9 @@ The first implementation target is a macOS app using SwiftVLC. Live streams are
 fed through the bundled TS dual-mono filter helper before reaching SwiftVLC, so
 the same playback path is used for normal stereo and dual-mono programs. The
 current vertical slice can load a JSON config, display live streams as tiles,
-play audio only from the focused tile, and switch dual-mono audio with
-`S` / `L` / `R`. It also contains the first EPGStation API client layer for
-channel selection.
+play audio only from the focused tile, and switch dual-mono or multi-stream
+audio between primary and secondary audio. It also contains the first EPGStation
+API client layer for channel selection.
 
 Current provisional keyboard and mouse controls for development:
 
@@ -16,7 +16,8 @@ Current provisional keyboard and mouse controls for development:
 - Press `C` or double-click a tile to choose a channel for the focused tile.
 - Press `Delete` or `Forward Delete` to clear the focused tile.
 - Press `+` / `=` or `-` to grow or shrink the tile layout.
-- Press `S`, `L`, or `R` to switch the focused tile's stereo mode.
+- Press `L` or `R` to switch the focused tile between primary and secondary
+  audio when the stream exposes dual-mono or multiple audio streams.
 
 ## Requirements
 
@@ -64,7 +65,7 @@ to the helper stdin directly.
 
 Initial local validation of the filter-only playback path:
 
-- `S` / `L` / `R` switching works.
+- Primary/secondary switching works for dual-mono programs.
 - Ordinary stereo programs also play without immediately visible AV drift.
 - 9 simultaneous streams appear stable in the current development environment.
 - All filter helper processes together stayed within roughly 1% CPU usage.
@@ -96,6 +97,11 @@ The app intentionally routes every tile through `ReplayCenterDualMonoFilter`.
 The filter has been light enough in local validation, and using one playback
 path avoids reconnecting streams when a program changes between stereo and
 dual-mono audio.
+
+The filter also detects multiple AAC audio streams. For multi-stream programs it
+rewrites PMT output and drops non-selected audio packets so SwiftVLC sees only
+the selected audio stream. This keeps dual-mono and multi-stream switching on
+the same primary/secondary UI path.
 
 Tile playback state is intentionally minimal:
 
