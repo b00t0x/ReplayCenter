@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var startupStreams: StartupStreamsMode
     @State private var volumePercent: Int
     @State private var tileLayout: TileLayoutConfig
+    @State private var tileLayoutCategory: TileLayoutCategory
     @State private var favoriteChannelIDs: [Int]
     @State private var errorMessage: String?
 
@@ -22,6 +23,7 @@ struct SettingsView: View {
         _startupStreams = State(initialValue: model.settings.startupStreams ?? .configured)
         _volumePercent = State(initialValue: VolumeLevel.normalized(model.settings.volumePercent))
         _tileLayout = State(initialValue: model.layout)
+        _tileLayoutCategory = State(initialValue: TileLayoutCategory.category(for: model.layout))
         _favoriteChannelIDs = State(initialValue: model.channelSettings.favoriteChannelIDs)
     }
 
@@ -191,14 +193,29 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("配置")
                     .font(.headline)
-                Picker("配置", selection: $tileLayout) {
-                    ForEach(TileLayoutConfig.presets, id: \.self) { layout in
-                        Text(layout.summary).tag(layout)
+                Picker("配置カテゴリ", selection: $tileLayoutCategory) {
+                    ForEach(TileLayoutCategory.allCases) { category in
+                        Text(category.label).tag(category)
                     }
                 }
                 .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(maxWidth: 220, alignment: .leading)
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 420)
+
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 126, maximum: 160), spacing: 12)],
+                    alignment: .leading,
+                    spacing: 12
+                ) {
+                    ForEach(tileLayoutCategory.layouts, id: \.self) { layout in
+                        TileLayoutOptionView(
+                            layout: layout,
+                            isSelected: tileLayout.hasSameShape(as: layout)
+                        ) {
+                            tileLayout = layout
+                        }
+                    }
+                }
             }
         }
     }
@@ -414,6 +431,131 @@ private struct ChannelSettingsRow: View {
         }
         .padding(.vertical, 8)
         .contentShape(Rectangle())
+    }
+}
+
+private enum TileLayoutCategory: String, CaseIterable, Identifiable {
+    case standard
+    case wideTall
+    case large
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .standard:
+            return "標準"
+        case .wideTall:
+            return "縦横"
+        case .large:
+            return "ラージ"
+        }
+    }
+
+    var layouts: [TileLayoutConfig] {
+        switch self {
+        case .standard:
+            return TileLayoutConfig.standardPresets
+        case .wideTall:
+            return TileLayoutConfig.wideTallPresets
+        case .large:
+            return TileLayoutConfig.largePresets
+        }
+    }
+
+    static func category(for layout: TileLayoutConfig) -> TileLayoutCategory {
+        if large.layouts.contains(where: { layout.hasSameShape(as: $0) }) {
+            return .large
+        }
+        if wideTall.layouts.contains(where: { layout.hasSameShape(as: $0) }) {
+            return .wideTall
+        }
+        return .standard
+    }
+}
+
+private struct TileLayoutOptionView: View {
+    let layout: TileLayoutConfig
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 7) {
+                TileLayoutPreview(layout: layout)
+                    .frame(width: 108, height: 68)
+
+                HStack(spacing: 5) {
+                    Text(layout.summary)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Text("\(layout.tileCount)枚")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isSelected ? Color.accentColor.opacity(0.18) : Color.white.opacity(0.08))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isSelected ? Color.accentColor : Color.white.opacity(0.16), lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .help(layout.summary)
+    }
+}
+
+private struct TileLayoutPreview: View {
+    let layout: TileLayoutConfig
+
+    var body: some View {
+        GeometryReader { proxy in
+            let previewSize = fittedSize(in: proxy.size)
+            let cellWidth = previewSize.width / CGFloat(layout.columns)
+            let cellHeight = previewSize.height / CGFloat(layout.rows)
+
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(layout.placements.enumerated()), id: \.offset) { _, placement in
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(tileColor(for: placement))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 3)
+                                .stroke(Color.white.opacity(0.35), lineWidth: 0.8)
+                        }
+                        .frame(
+                            width: max(cellWidth * CGFloat(placement.width) - 2, 1),
+                            height: max(cellHeight * CGFloat(placement.height) - 2, 1)
+                        )
+                        .position(
+                            x: cellWidth * (CGFloat(placement.x) + CGFloat(placement.width) / 2),
+                            y: cellHeight * (CGFloat(placement.y) + CGFloat(placement.height) / 2)
+                        )
+                }
+            }
+            .frame(width: previewSize.width, height: previewSize.height)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
+        }
+    }
+
+    private func fittedSize(in availableSize: CGSize) -> CGSize {
+        guard availableSize.width > 0, availableSize.height > 0 else { return .zero }
+        let aspect = CGFloat(layout.columns * 16) / CGFloat(layout.rows * 9)
+        let availableAspect = availableSize.width / availableSize.height
+        if availableAspect > aspect {
+            return CGSize(width: availableSize.height * aspect, height: availableSize.height)
+        }
+        return CGSize(width: availableSize.width, height: availableSize.width / aspect)
+    }
+
+    private func tileColor(for placement: TilePlacement) -> Color {
+        if placement.width > 1 || placement.height > 1 {
+            return Color.accentColor.opacity(0.72)
+        }
+        return Color.white.opacity(0.3)
     }
 }
 

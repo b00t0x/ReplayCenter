@@ -86,6 +86,26 @@ Runtime state, such as the last tile layout, is saved outside the config file in
 the user's Application Support directory. Set `REPLAYCENTER_STATE_PATH` during
 development to override the state file location.
 
+`tileLayout` also accepts explicit cell placements for non-uniform layouts. Each
+placement is expressed in 16:9 logical cells, and all cells must be covered
+without overlap:
+
+```json
+{
+  "columns": 3,
+  "rows": 3,
+  "label": "3x3 large top-left",
+  "placements": [
+    { "x": 0, "y": 0, "width": 2, "height": 2 },
+    { "x": 2, "y": 0, "width": 1, "height": 1 },
+    { "x": 2, "y": 1, "width": 1, "height": 1 },
+    { "x": 0, "y": 2, "width": 1, "height": 1 },
+    { "x": 1, "y": 2, "width": 1, "height": 1 },
+    { "x": 2, "y": 2, "width": 1, "height": 1 }
+  ]
+}
+```
+
 ## Development Notes
 
 ReplayCenter is still in a vertical-slice phase. The current goal is to keep the

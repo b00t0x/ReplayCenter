@@ -60,29 +60,35 @@ struct ContentView: View {
             let cellWidth = gridSize.width / CGFloat(columns)
             let cellHeight = gridSize.height / CGFloat(rows)
 
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.fixed(cellWidth), spacing: 0), count: columns),
-                spacing: 0
-            ) {
+            ZStack(alignment: .topLeading) {
                 ForEach(Array(model.tiles.enumerated()), id: \.element.id) { index, tile in
-                    TileView(model: tile, focused: model.focusedIndex == index, volumePercent: model.volumePercent) {
-                        model.focus(index)
-                    } onOpenChannelSelector: {
-                        openChannelSelector()
-                    } onSetAudioSelection: { selection in
-                        model.setFocusedAudioSelection(selection)
-                    } onToggleMuted: {
-                        model.toggleFocusedTileMuted()
-                    } onDecreaseVolume: {
-                        model.decreaseVolume()
-                    } onIncreaseVolume: {
-                        model.increaseVolume()
-                    } onReload: {
-                        model.reloadFocusedTile()
-                    } onClear: {
-                        model.clearFocusedTile()
+                    if let placement = model.layout.placement(at: index) {
+                        TileView(model: tile, focused: model.focusedIndex == index, volumePercent: model.volumePercent) {
+                            model.focus(index)
+                        } onOpenChannelSelector: {
+                            openChannelSelector()
+                        } onSetAudioSelection: { selection in
+                            model.setFocusedAudioSelection(selection)
+                        } onToggleMuted: {
+                            model.toggleFocusedTileMuted()
+                        } onDecreaseVolume: {
+                            model.decreaseVolume()
+                        } onIncreaseVolume: {
+                            model.increaseVolume()
+                        } onReload: {
+                            model.reloadFocusedTile()
+                        } onClear: {
+                            model.clearFocusedTile()
+                        }
+                        .frame(
+                            width: cellWidth * CGFloat(placement.width),
+                            height: cellHeight * CGFloat(placement.height)
+                        )
+                        .position(
+                            x: cellWidth * (CGFloat(placement.x) + CGFloat(placement.width) / 2),
+                            y: cellHeight * (CGFloat(placement.y) + CGFloat(placement.height) / 2)
+                        )
                     }
-                    .frame(width: cellWidth, height: cellHeight)
                 }
             }
             .frame(width: gridSize.width, height: gridSize.height, alignment: .topLeading)

@@ -150,12 +150,24 @@ enum StartupStreamsMode: String, Codable, Hashable {
     case empty
 }
 
+struct TilePlacement: Codable, Equatable, Hashable {
+    let x: Int
+    let y: Int
+    let width: Int
+    let height: Int
+
+    var maxX: Int { x + width }
+    var maxY: Int { y + height }
+}
+
 struct TileLayoutConfig: Codable, Equatable, Hashable {
     let columns: Int
     let rows: Int
+    let placements: [TilePlacement]
+    let label: String?
 
     static let fallback = TileLayoutConfig(columns: 1, rows: 1)
-    static let presets = [
+    static let standardPresets = [
         TileLayoutConfig(columns: 1, rows: 1),
         TileLayoutConfig(columns: 2, rows: 1),
         TileLayoutConfig(columns: 2, rows: 2),
@@ -163,14 +175,181 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
         TileLayoutConfig(columns: 2, rows: 3),
         TileLayoutConfig(columns: 3, rows: 3)
     ]
+    static let wideTallPresets = [
+        TileLayoutConfig(columns: 3, rows: 1),
+        TileLayoutConfig(columns: 4, rows: 1),
+        TileLayoutConfig(columns: 1, rows: 3),
+        TileLayoutConfig(columns: 1, rows: 4),
+        TileLayoutConfig(columns: 4, rows: 2),
+        TileLayoutConfig(columns: 2, rows: 4)
+    ]
+    static let largePresets = [
+        TileLayoutConfig.large(
+            columns: 3,
+            rows: 2,
+            largeTiles: [TilePlacement(x: 0, y: 0, width: 2, height: 2)],
+            label: "3x2 大左"
+        ),
+        TileLayoutConfig.large(
+            columns: 3,
+            rows: 2,
+            largeTiles: [TilePlacement(x: 1, y: 0, width: 2, height: 2)],
+            label: "3x2 大右"
+        ),
+        TileLayoutConfig.large(
+            columns: 2,
+            rows: 3,
+            largeTiles: [TilePlacement(x: 0, y: 0, width: 2, height: 2)],
+            label: "2x3 大上"
+        ),
+        TileLayoutConfig.large(
+            columns: 2,
+            rows: 3,
+            largeTiles: [TilePlacement(x: 0, y: 1, width: 2, height: 2)],
+            label: "2x3 大下"
+        ),
+        TileLayoutConfig.large(
+            columns: 3,
+            rows: 3,
+            largeTiles: [TilePlacement(x: 0, y: 0, width: 2, height: 2)],
+            label: "3x3 大左上"
+        ),
+        TileLayoutConfig.large(
+            columns: 3,
+            rows: 3,
+            largeTiles: [TilePlacement(x: 1, y: 0, width: 2, height: 2)],
+            label: "3x3 大右上"
+        ),
+        TileLayoutConfig.large(
+            columns: 3,
+            rows: 3,
+            largeTiles: [TilePlacement(x: 0, y: 1, width: 2, height: 2)],
+            label: "3x3 大左下"
+        ),
+        TileLayoutConfig.large(
+            columns: 3,
+            rows: 3,
+            largeTiles: [TilePlacement(x: 1, y: 1, width: 2, height: 2)],
+            label: "3x3 大右下"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 2,
+            largeTiles: [TilePlacement(x: 0, y: 0, width: 2, height: 2)],
+            label: "4x2 大左"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 2,
+            largeTiles: [TilePlacement(x: 1, y: 0, width: 2, height: 2)],
+            label: "4x2 大中"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 2,
+            largeTiles: [TilePlacement(x: 2, y: 0, width: 2, height: 2)],
+            label: "4x2 大右"
+        ),
+        TileLayoutConfig.large(
+            columns: 2,
+            rows: 4,
+            largeTiles: [TilePlacement(x: 0, y: 0, width: 2, height: 2)],
+            label: "2x4 大上"
+        ),
+        TileLayoutConfig.large(
+            columns: 2,
+            rows: 4,
+            largeTiles: [TilePlacement(x: 0, y: 1, width: 2, height: 2)],
+            label: "2x4 大中"
+        ),
+        TileLayoutConfig.large(
+            columns: 2,
+            rows: 4,
+            largeTiles: [TilePlacement(x: 0, y: 2, width: 2, height: 2)],
+            label: "2x4 大下"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 4,
+            largeTiles: [
+                TilePlacement(x: 2, y: 0, width: 2, height: 2),
+                TilePlacement(x: 0, y: 2, width: 2, height: 2),
+                TilePlacement(x: 2, y: 2, width: 2, height: 2)
+            ],
+            label: "4x4 大3 左上小"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 4,
+            largeTiles: [
+                TilePlacement(x: 0, y: 0, width: 2, height: 2),
+                TilePlacement(x: 0, y: 2, width: 2, height: 2),
+                TilePlacement(x: 2, y: 2, width: 2, height: 2)
+            ],
+            label: "4x4 大3 右上小"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 4,
+            largeTiles: [
+                TilePlacement(x: 0, y: 0, width: 2, height: 2),
+                TilePlacement(x: 2, y: 0, width: 2, height: 2),
+                TilePlacement(x: 2, y: 2, width: 2, height: 2)
+            ],
+            label: "4x4 大3 左下小"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 4,
+            largeTiles: [
+                TilePlacement(x: 0, y: 0, width: 2, height: 2),
+                TilePlacement(x: 2, y: 0, width: 2, height: 2),
+                TilePlacement(x: 0, y: 2, width: 2, height: 2)
+            ],
+            label: "4x4 大3 右下小"
+        )
+    ]
+    static let presets = standardPresets
+
+    init(
+        columns: Int,
+        rows: Int,
+        placements: [TilePlacement]? = nil,
+        label: String? = nil
+    ) {
+        self.columns = columns
+        self.rows = rows
+        self.placements = placements ?? Self.equalPlacements(columns: columns, rows: rows)
+        self.label = label
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        columns = try container.decode(Int.self, forKey: .columns)
+        rows = try container.decode(Int.self, forKey: .rows)
+        placements = try container.decodeIfPresent([TilePlacement].self, forKey: .placements)
+            ?? Self.equalPlacements(columns: columns, rows: rows)
+        label = try container.decodeIfPresent(String.self, forKey: .label)
+    }
 
     var validOrFallback: TileLayoutConfig {
-        guard columns > 0, rows > 0 else { return .fallback }
+        guard columns > 0, rows > 0, !placements.isEmpty else { return .fallback }
+        guard placements.allSatisfy({ placement in
+            placement.x >= 0
+                && placement.y >= 0
+                && placement.width > 0
+                && placement.height > 0
+                && placement.maxX <= columns
+                && placement.maxY <= rows
+        }) else {
+            return .fallback
+        }
+        guard hasCompleteCellCoverage else { return .fallback }
         return self
     }
 
     var tileCount: Int {
-        columns * rows
+        placements.count
     }
 
     var gridAspectRatio: CGSize {
@@ -186,7 +365,13 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
     }
 
     var summary: String {
-        "\(columns)x\(rows)"
+        if let label, !label.isEmpty {
+            return label
+        }
+        if isUniformGrid {
+            return "\(columns)x\(rows)"
+        }
+        return "\(columns)x\(rows)"
     }
 
     var nextLarger: TileLayoutConfig? {
@@ -231,6 +416,70 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
     func fitting(streamCount: Int) -> TileLayoutConfig {
         guard streamCount > tileCount else { return self }
         return .automatic(tileCount: streamCount)
+    }
+
+    func placement(at index: Int) -> TilePlacement? {
+        guard placements.indices.contains(index) else { return nil }
+        return placements[index]
+    }
+
+    func hasSameShape(as other: TileLayoutConfig) -> Bool {
+        columns == other.columns
+            && rows == other.rows
+            && placements == other.placements
+    }
+
+    private var isUniformGrid: Bool {
+        placements == Self.equalPlacements(columns: columns, rows: rows)
+    }
+
+    private var hasCompleteCellCoverage: Bool {
+        var occupied = Set<String>()
+        for placement in placements {
+            for y in placement.y..<placement.maxY {
+                for x in placement.x..<placement.maxX {
+                    let key = "\(x),\(y)"
+                    guard !occupied.contains(key) else { return false }
+                    occupied.insert(key)
+                }
+            }
+        }
+        return occupied.count == columns * rows
+    }
+
+    private static func equalPlacements(columns: Int, rows: Int) -> [TilePlacement] {
+        guard columns > 0, rows > 0 else { return [] }
+        return (0..<rows).flatMap { y in
+            (0..<columns).map { x in
+                TilePlacement(x: x, y: y, width: 1, height: 1)
+            }
+        }
+    }
+
+    private static func large(
+        columns: Int,
+        rows: Int,
+        largeTiles: [TilePlacement],
+        label: String
+    ) -> TileLayoutConfig {
+        var occupied = Set<String>()
+        for tile in largeTiles {
+            for y in tile.y..<tile.maxY {
+                for x in tile.x..<tile.maxX {
+                    occupied.insert("\(x),\(y)")
+                }
+            }
+        }
+
+        let smallTiles = equalPlacements(columns: columns, rows: rows).filter { placement in
+            !occupied.contains("\(placement.x),\(placement.y)")
+        }
+        return TileLayoutConfig(
+            columns: columns,
+            rows: rows,
+            placements: largeTiles + smallTiles,
+            label: label
+        )
     }
 }
 
