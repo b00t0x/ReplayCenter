@@ -69,6 +69,14 @@ struct ContentView: View {
                         model.focus(index)
                     } onOpenChannelSelector: {
                         openChannelSelector()
+                    } onSetAudioMode: { mode in
+                        model.setFocusedAudioMode(mode)
+                    } onToggleMuted: {
+                        model.toggleFocusedTileMuted()
+                    } onReload: {
+                        model.reloadFocusedTile()
+                    } onClear: {
+                        model.clearFocusedTile()
                     }
                     .frame(width: cellWidth, height: cellHeight)
                 }

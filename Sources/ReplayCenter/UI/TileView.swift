@@ -6,6 +6,11 @@ struct TileView: View {
     let focused: Bool
     let onFocus: () -> Void
     let onOpenChannelSelector: () -> Void
+    let onSetAudioMode: (AudioMode) -> Void
+    let onToggleMuted: () -> Void
+    let onReload: () -> Void
+    let onClear: () -> Void
+    @State private var isHovering = false
 
     var body: some View {
         VideoView(model.player)
@@ -25,11 +30,48 @@ struct TileView: View {
                     .foregroundStyle(labelColor)
             }
             .overlay {
+                if let statusText = model.playbackState.displayText {
+                    Text(statusText)
+                        .font(.caption)
+                        .foregroundStyle(statusColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(.black.opacity(0.65))
+                }
+            }
+            .overlay {
                 Rectangle()
                     .stroke(focused ? Color.accentColor : Color.clear, lineWidth: 2)
             }
+            .overlay(alignment: .bottom) {
+                if focused && isHovering {
+                    FocusedTileControlsView(
+                        hasStream: model.stream != nil,
+                        audioMode: model.currentAudioMode,
+                        isMuted: model.isMuted
+                    ) {
+                        onFocus()
+                        onOpenChannelSelector()
+                    } onSetAudioMode: { mode in
+                        onFocus()
+                        onSetAudioMode(mode)
+                    } onToggleMuted: {
+                        onToggleMuted()
+                    } onReload: {
+                        onFocus()
+                        onReload()
+                    } onClear: {
+                        onFocus()
+                        onClear()
+                    }
+                    .padding(.bottom, 8)
+                }
+            }
             .contentShape(Rectangle())
             .gesture(tileTapGesture)
+            .onHover { hovering in
+                isHovering = hovering
+            }
             .task {
                 model.startIfNeeded()
             }
@@ -46,6 +88,10 @@ struct TileView: View {
 
     private var labelColor: Color {
         model.stream == nil ? .secondary : .white
+    }
+
+    private var statusColor: Color {
+        model.playbackState.isFailure ? .red : .white
     }
 
     private var tileTapGesture: some Gesture {

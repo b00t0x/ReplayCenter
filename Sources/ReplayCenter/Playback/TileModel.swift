@@ -7,18 +7,23 @@ import SwiftVLC
 final class TileModel: Identifiable {
     let id = UUID()
     private(set) var stream: StreamConfig?
+    private(set) var playbackState: TilePlaybackState
+    private(set) var currentAudioMode: AudioMode
+    private(set) var isMuted: Bool
     let player: Player
     private let config: AppConfig
     private var started = false
-    private var currentAudioMode: AudioMode
     private var dualMonoFilterPipeline: DualMonoFilterPipeline?
+    private var activePipelineID: UUID?
 
     init(stream: StreamConfig?, config: AppConfig, instance: VLCInstance) {
         self.stream = stream
         self.config = config
         self.player = Player(instance: instance)
+        playbackState = .idle
         currentAudioMode = stream?.audioMode ?? config.audioMode ?? .stereo
-        player.isMuted = stream?.muted ?? config.startMuted ?? true
+        isMuted = stream?.muted ?? config.startMuted ?? true
+        player.isMuted = isMuted
         player.stereoMode = currentAudioMode.stereoMode
     }
 
@@ -38,13 +43,16 @@ final class TileModel: Identifiable {
     func clear() {
         stream = nil
         started = false
+        playbackState = .idle
+        activePipelineID = nil
         player.stop()
         dualMonoFilterPipeline?.stop()
         dualMonoFilterPipeline = nil
-        player.isMuted = true
+        setMuted(true)
     }
 
     func setMuted(_ muted: Bool) {
+        isMuted = muted
         player.isMuted = muted
     }
 
@@ -54,7 +62,15 @@ final class TileModel: Identifiable {
         dualMonoFilterPipeline?.setAudioMode(mode)
     }
 
+    func reload() {
+        guard stream != nil else { return }
+        started = true
+        start()
+    }
+
     func shutdown() async {
+        playbackState = .idle
+        activePipelineID = nil
         player.stop()
         dualMonoFilterPipeline?.stop()
         dualMonoFilterPipeline = nil
@@ -64,23 +80,32 @@ final class TileModel: Identifiable {
     private func start() {
         guard let stream else { return }
         guard let url = URL(string: stream.url) else {
+            playbackState = .failed("invalid url")
             log("invalid url=\(stream.url)")
             return
         }
         currentAudioMode = stream.audioMode ?? config.audioMode ?? .stereo
         player.stereoMode = currentAudioMode.stereoMode
+        playbackState = .starting
+        activePipelineID = nil
         player.stop()
         dualMonoFilterPipeline?.stop()
         dualMonoFilterPipeline = nil
 
         do {
+            let pipelineID = UUID()
             let pipeline = DualMonoFilterPipeline(
                 streamURL: url.absoluteString,
                 label: stream.title ?? stream.url,
                 config: config.dualMonoFilter ?? .default
-            )
-            let media = try pipeline.start(initialMode: currentAudioMode)
+            ) { [weak self] event in
+                Task { @MainActor in
+                    self?.handlePipelineEvent(event, pipelineID: pipelineID)
+                }
+            }
+            activePipelineID = pipelineID
             dualMonoFilterPipeline = pipeline
+            let media = try pipeline.start(initialMode: currentAudioMode)
             if let networkCachingMs = config.networkCachingMs {
                 media.addOption(":network-caching=\(networkCachingMs)")
                 media.addOption(":live-caching=\(networkCachingMs)")
@@ -94,12 +119,40 @@ final class TileModel: Identifiable {
 
             applyDeinterlaceIfNeeded()
             try player.play(media)
+            playbackState = .playing
             log("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel) audioMode=\(currentAudioMode.rawValue) filter=\((config.dualMonoFilter ?? .default).summary)")
         } catch {
+            playbackState = .failed(error.localizedDescription)
+            activePipelineID = nil
             dualMonoFilterPipeline?.stop()
             dualMonoFilterPipeline = nil
             log("play failed error=\(error)")
         }
+    }
+
+    private func handlePipelineEvent(_ event: DualMonoFilterPipelineEvent, pipelineID: UUID) {
+        guard activePipelineID == pipelineID else { return }
+
+        switch event {
+        case let .curlExited(status, reason, stderr):
+            let detail = "curl exited status=\(status) reason=\(reason)"
+            if let stderr {
+                failPlayback("\(detail): \(stderr)")
+            } else {
+                failPlayback(detail)
+            }
+        case let .filterExited(status, reason):
+            failPlayback("dual mono filter exited status=\(status) reason=\(reason)")
+        }
+    }
+
+    private func failPlayback(_ message: String) {
+        playbackState = .failed(message)
+        activePipelineID = nil
+        player.stop()
+        dualMonoFilterPipeline?.stop()
+        dualMonoFilterPipeline = nil
+        log("playback failed \(message)")
     }
 
     private func applyDeinterlaceIfNeeded() {

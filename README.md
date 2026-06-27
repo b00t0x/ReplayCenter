@@ -75,3 +75,42 @@ Initial local validation of the filter-only playback path:
 Runtime state, such as the last tile layout, is saved outside the config file in
 the user's Application Support directory. Set `REPLAYCENTER_STATE_PATH` during
 development to override the state file location.
+
+## Development Notes
+
+ReplayCenter is still in a vertical-slice phase. The current goal is to keep the
+core playback path observable and easy to adjust before polishing the final
+operation model or public documentation.
+
+Playback flow:
+
+```text
+EPGStation live stream
+  -> /usr/bin/curl
+  -> ReplayCenterDualMonoFilter
+  -> SwiftVLC Media(fileDescriptor:)
+  -> focused-tile audio / tiled video
+```
+
+The app intentionally routes every tile through `ReplayCenterDualMonoFilter`.
+The filter has been light enough in local validation, and using one playback
+path avoids reconnecting streams when a program changes between stereo and
+dual-mono audio.
+
+Tile playback state is intentionally minimal:
+
+- `idle`: no stream assigned
+- `starting`: stream launch is in progress, often too brief to see on screen
+- `playing`: normal state, no visible badge
+- `failed`: visible `再生失敗` badge on the tile, with details in stderr
+
+The pipeline logs helper exits with the tile label. If playback fails, check the
+terminal output for `curl exited`, `dual mono filter exited`, or
+`playback failed`.
+
+Current development TODOs:
+
+- Replace the `/usr/bin/curl` bridge with app-internal stream reading.
+- Decide the final tile operation UI before polishing shortcuts and overlays.
+- Keep the on-tile state display quiet during normal playback; show only
+  actionable failures unless debugging needs more detail.

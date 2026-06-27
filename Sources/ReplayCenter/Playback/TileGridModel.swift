@@ -62,6 +62,13 @@ final class TileGridModel {
         tiles[focusedIndex].setAudioMode(mode)
     }
 
+    func toggleFocusedTileMuted() {
+        guard tiles.indices.contains(focusedIndex) else { return }
+        let tile = tiles[focusedIndex]
+        guard tile.stream != nil else { return }
+        tile.setMuted(!tile.isMuted)
+    }
+
     func playFocusedChannel(_ channel: EPGStationChannel) {
         guard tiles.indices.contains(focusedIndex), let epgStationClient else { return }
 
@@ -85,6 +92,12 @@ final class TileGridModel {
     func clearFocusedTile() {
         guard tiles.indices.contains(focusedIndex) else { return }
         tiles[focusedIndex].clear()
+        focus(focusedIndex)
+    }
+
+    func reloadFocusedTile() {
+        guard tiles.indices.contains(focusedIndex) else { return }
+        tiles[focusedIndex].reload()
         focus(focusedIndex)
     }
 

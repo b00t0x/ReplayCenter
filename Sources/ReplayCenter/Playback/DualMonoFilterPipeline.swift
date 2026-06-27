@@ -2,21 +2,33 @@ import Darwin
 import Foundation
 import SwiftVLC
 
+enum DualMonoFilterPipelineEvent: Sendable {
+    case curlExited(status: Int32, reason: Int, stderr: String?)
+    case filterExited(status: Int32, reason: Int)
+}
+
 @MainActor
 final class DualMonoFilterPipeline {
     private let streamURL: String
     private let label: String
     private let config: DualMonoFilterConfig
+    private let onEvent: @Sendable (DualMonoFilterPipelineEvent) -> Void
     private var curlProcess: Process?
     private var filterProcess: Process?
     private var filterInputPipe: Pipe?
     private var filterOutputPipe: Pipe?
     private var duplicatedOutputFD: Int32 = -1
 
-    init(streamURL: String, label: String, config: DualMonoFilterConfig) {
+    init(
+        streamURL: String,
+        label: String,
+        config: DualMonoFilterConfig,
+        onEvent: @escaping @Sendable (DualMonoFilterPipelineEvent) -> Void
+    ) {
         self.streamURL = streamURL
         self.label = label
         self.config = config
+        self.onEvent = onEvent
     }
 
     func start(initialMode: AudioMode) throws -> Media {
@@ -38,11 +50,16 @@ final class DualMonoFilterPipeline {
         filterProcess.standardInput = inputPipe
         filterProcess.standardOutput = outputPipe
         filterProcess.standardError = FileHandle.standardError
-        filterProcess.terminationHandler = { [label] process in
+        let onEvent = onEvent
+        filterProcess.terminationHandler = { [label, onEvent] process in
             fputs(
                 "[\(label)] dual mono filter exited status=\(process.terminationStatus) reason=\(process.terminationReason.rawValue)\n",
                 stderr
             )
+            onEvent(.filterExited(
+                status: process.terminationStatus,
+                reason: process.terminationReason.rawValue
+            ))
         }
 
         let curlErrorPipe = Pipe()
@@ -57,7 +74,7 @@ final class DualMonoFilterPipeline {
         ]
         curlProcess.standardOutput = inputPipe
         curlProcess.standardError = curlErrorPipe
-        curlProcess.terminationHandler = { [label] process in
+        curlProcess.terminationHandler = { [label, onEvent] process in
             inputPipe.fileHandleForWriting.closeFile()
             let errorData = curlErrorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8)?
@@ -68,6 +85,11 @@ final class DualMonoFilterPipeline {
                     "[\(label)] curl exited after downstream closed status=23 reason=\(process.terminationReason.rawValue)\n",
                     stderr
                 )
+                onEvent(.curlExited(
+                    status: process.terminationStatus,
+                    reason: process.terminationReason.rawValue,
+                    stderr: errorMessage?.isEmpty == false ? errorMessage : nil
+                ))
                 return
             }
 
@@ -78,6 +100,11 @@ final class DualMonoFilterPipeline {
             if let errorMessage, !errorMessage.isEmpty {
                 fputs("[\(label)] curl stderr: \(errorMessage)\n", stderr)
             }
+            onEvent(.curlExited(
+                status: process.terminationStatus,
+                reason: process.terminationReason.rawValue,
+                stderr: errorMessage?.isEmpty == false ? errorMessage : nil
+            ))
         }
 
         self.filterProcess = filterProcess
