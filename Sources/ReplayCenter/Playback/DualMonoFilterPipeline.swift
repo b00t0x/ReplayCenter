@@ -156,6 +156,11 @@ final class DualMonoFilterPipeline {
             return absolutePath(configuredPath)
         }
 
+        if let envPath = ProcessInfo.processInfo.environment["REPLAYCENTER_STREAM_FILTER_PATH"],
+           !envPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return absolutePath(envPath)
+        }
+
         if let envPath = ProcessInfo.processInfo.environment["REPLAYCENTER_TS_FILTER_PATH"],
            !envPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return absolutePath(envPath)
@@ -167,13 +172,13 @@ final class DualMonoFilterPipeline {
             return path
         }
 
-        throw NSError(domain: "ReplayCenter.DualMonoFilter", code: 1, userInfo: [
-            NSLocalizedDescriptionKey: "ReplayCenterDualMonoFilter not found. Build it with `swift build --product ReplayCenterDualMonoFilter` or set REPLAYCENTER_TS_FILTER_PATH."
+        throw NSError(domain: "ReplayCenter.StreamFilter", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "ReplayCenterStreamFilter not found. Build it with `swift build --product ReplayCenterStreamFilter` or set REPLAYCENTER_STREAM_FILTER_PATH."
         ])
     }
 
     private func defaultFilterExecutableCandidates() -> [String] {
-        let executableName = "ReplayCenterDualMonoFilter"
+        let executableName = "ReplayCenterStreamFilter"
         var candidates: [String] = []
 
         if let executableDirectory = Bundle.main.executableURL?.deletingLastPathComponent() {

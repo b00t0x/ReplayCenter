@@ -9,7 +9,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "ReplayCenter", targets: ["ReplayCenter"]),
-        .executable(name: "ReplayCenterDualMonoFilter", targets: ["ReplayCenterDualMonoFilter"])
+        .executable(name: "ReplayCenterStreamFilter", targets: ["ReplayCenterStreamFilter"])
     ],
     dependencies: [
         .package(url: "https://github.com/harflabs/SwiftVLC.git", exact: "0.10.0")
@@ -26,8 +26,8 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "ReplayCenterDualMonoFilter",
-            path: "Sources/ReplayCenterDualMonoFilter",
+            name: "ReplayCenterStreamFilter",
+            path: "Sources/ReplayCenterStreamFilter",
             sources: [
                 "filter.cpp",
                 "third_party/tsreadex/aac.cpp",

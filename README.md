@@ -3,12 +3,12 @@
 ReplayCenter is a desktop-oriented live TV viewing application for EPGStation.
 
 The first implementation target is a macOS app using SwiftVLC. Live streams are
-fed through the bundled TS dual-mono filter helper before reaching SwiftVLC, so
-the same playback path is used for normal stereo and dual-mono programs. The
-current vertical slice can load a JSON config, display live streams as tiles,
-play audio only from the focused tile, and switch dual-mono or multi-stream
-audio between primary and secondary audio. It also contains the first EPGStation
-API client layer for channel selection.
+fed through the bundled stream filter helper before reaching SwiftVLC, so the
+same playback path is used for normal stereo, dual-mono, and multi-stream audio
+programs. The current vertical slice can load a JSON config, display live
+streams as tiles, play audio only from the focused tile, and switch dual-mono or
+multi-stream audio between primary and secondary audio. It also contains the
+first EPGStation API client layer for channel selection.
 
 Current provisional keyboard and mouse controls for development:
 
@@ -42,7 +42,7 @@ still point at Xcode's older Swift.
 ## Run
 
 ```bash
-swift build --product ReplayCenterDualMonoFilter
+swift build --product ReplayCenterStreamFilter
 swift run ReplayCenter
 ```
 
@@ -81,9 +81,11 @@ Important defaults:
   `false`, which is the current stable setting from the PoC validation.
 
 `filterPath` can usually stay unset. During development ReplayCenter looks for a
-`ReplayCenterDualMonoFilter` executable next to the app binary or in
-`.build/debug` / `.build/release`. Set `REPLAYCENTER_TS_FILTER_PATH` or
-`dualMonoFilter.filterPath` when using a custom helper path.
+`ReplayCenterStreamFilter` executable next to the app binary or in
+`.build/debug` / `.build/release`. Set `REPLAYCENTER_STREAM_FILTER_PATH` or
+`dualMonoFilter.filterPath` when using a custom helper path. The legacy
+`REPLAYCENTER_TS_FILTER_PATH` environment variable is still accepted during the
+rename transition.
 
 For EPGStation channel selection, playback profiles are applied by tile size.
 Mode names are loaded from EPGStation's `/api/config` `streamConfig` response.
@@ -141,15 +143,15 @@ Playback flow:
 ```text
 EPGStation live stream
   -> app-internal HTTP stream reader
-  -> ReplayCenterDualMonoFilter
+  -> ReplayCenterStreamFilter
   -> SwiftVLC Media(fileDescriptor:)
   -> focused-tile audio / tiled video
 ```
 
-The app intentionally routes every tile through `ReplayCenterDualMonoFilter`.
-The filter has been light enough in local validation, and using one playback
-path avoids reconnecting streams when a program changes between stereo and
-dual-mono audio.
+The app intentionally routes every tile through `ReplayCenterStreamFilter`. The
+filter has been light enough in local validation, and using one playback path
+avoids reconnecting streams when a program changes between stereo and dual-mono
+audio.
 
 The filter also detects multiple AAC audio streams. For multi-stream programs it
 rewrites PMT output and drops non-selected audio packets so SwiftVLC sees only
