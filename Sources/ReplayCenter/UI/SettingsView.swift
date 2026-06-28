@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Bindable var model: TileGridModel
@@ -13,6 +14,8 @@ struct SettingsView: View {
     @State private var keepFocusOnSingleLargeTile: Bool
     @State private var showStreamInfoOverlay: Bool
     @State private var favoriteChannelIDs: [Int]
+    @State private var hiddenChannelIDs: [Int]
+    @State private var draggingFavoriteChannelID: Int?
     @State private var errorMessage: String?
 
     init(
@@ -40,6 +43,7 @@ struct SettingsView: View {
             initialValue: model.settings.showStreamInfoOverlay ?? true
         )
         _favoriteChannelIDs = State(initialValue: model.channelSettings.favoriteChannelIDs)
+        _hiddenChannelIDs = State(initialValue: model.channelSettings.hiddenChannelIDs)
     }
 
     var body: some View {
@@ -279,20 +283,41 @@ struct SettingsView: View {
                     } else {
                         VStack(spacing: 0) {
                             ForEach(rows) { row in
-                                ChannelSettingsRow(
+                                let isFavorite = draftChannelSettings.containsFavorite(row.channelID)
+                                let rowView = ChannelSettingsRow(
                                     row: row,
-                                    isFavorite: draftChannelSettings.containsFavorite(row.channelID),
+                                    isFavorite: isFavorite,
+                                    isHidden: draftChannelSettings.containsHidden(row.channelID),
                                     canMoveUp: canMoveFavorite(row.channelID, by: -1),
                                     canMoveDown: canMoveFavorite(row.channelID, by: 1)
                                 ) {
-                                    setFavorite(
-                                        !draftChannelSettings.containsFavorite(row.channelID),
+                                    setFavorite(!isFavorite, channelID: row.channelID)
+                                } onToggleHidden: {
+                                    setHidden(
+                                        !draftChannelSettings.containsHidden(row.channelID),
                                         channelID: row.channelID
                                     )
                                 } onMoveUp: {
                                     moveFavorite(channelID: row.channelID, by: -1)
                                 } onMoveDown: {
                                     moveFavorite(channelID: row.channelID, by: 1)
+                                }
+                                if isFavorite {
+                                    rowView
+                                        .onDrag {
+                                            draggingFavoriteChannelID = row.channelID
+                                            return NSItemProvider(object: String(row.channelID) as NSString)
+                                        }
+                                        .onDrop(
+                                            of: [UTType.text],
+                                            delegate: FavoriteChannelDropDelegate(
+                                                targetChannelID: row.channelID,
+                                                favoriteChannelIDs: $favoriteChannelIDs,
+                                                draggingFavoriteChannelID: $draggingFavoriteChannelID
+                                            )
+                                        )
+                                } else {
+                                    rowView
                                 }
                                 Divider()
                             }
@@ -388,7 +413,11 @@ struct SettingsView: View {
     }
 
     private var draftChannelSettings: ChannelSettings {
-        ChannelSettings(favoriteChannelIDs: favoriteChannelIDs).normalized
+        ChannelSettings(
+            favoriteChannelIDs: favoriteChannelIDs,
+            hiddenChannelIDs: hiddenChannelIDs
+        )
+        .normalized
     }
 
     private func setFavorite(_ isFavorite: Bool, channelID: Int) {
@@ -401,6 +430,12 @@ struct SettingsView: View {
         var settings = draftChannelSettings
         settings.moveFavorite(channelID: channelID, by: offset)
         favoriteChannelIDs = settings.favoriteChannelIDs
+    }
+
+    private func setHidden(_ isHidden: Bool, channelID: Int) {
+        var settings = draftChannelSettings
+        settings.setHidden(isHidden, channelID: channelID)
+        hiddenChannelIDs = settings.hiddenChannelIDs
     }
 
     private func canMoveFavorite(_ channelID: Int, by offset: Int) -> Bool {
@@ -505,9 +540,11 @@ private struct PlaybackProfileEditor: View {
 private struct ChannelSettingsRow: View {
     let row: ChannelSettingsRowModel
     let isFavorite: Bool
+    let isHidden: Bool
     let canMoveUp: Bool
     let canMoveDown: Bool
     let onToggleFavorite: () -> Void
+    let onToggleHidden: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
 
@@ -529,6 +566,7 @@ private struct ChannelSettingsRow: View {
                     }
                     Text(row.title)
                         .lineLimit(1)
+                        .strikethrough(isHidden)
                 }
                     .font(.headline)
                 if let detail = row.detail {
@@ -536,10 +574,21 @@ private struct ChannelSettingsRow: View {
                         .font(.caption)
                         .foregroundStyle(row.isMissing ? .orange : .secondary)
                         .lineLimit(1)
+                        .strikethrough(isHidden)
                 }
             }
+            .opacity(isHidden ? 0.55 : 1)
 
             Spacer()
+
+            Button {
+                onToggleHidden()
+            } label: {
+                Image(systemName: isHidden ? "eye.slash.fill" : "eye")
+                    .foregroundStyle(isHidden ? .secondary : .primary)
+            }
+            .buttonStyle(.plain)
+            .help(isHidden ? "選局画面に表示する" : "選局画面で非表示にする")
 
             Button {
                 onMoveUp()
@@ -559,6 +608,30 @@ private struct ChannelSettingsRow: View {
         }
         .padding(.vertical, 8)
         .contentShape(Rectangle())
+    }
+}
+
+private struct FavoriteChannelDropDelegate: DropDelegate {
+    let targetChannelID: Int
+    @Binding var favoriteChannelIDs: [Int]
+    @Binding var draggingFavoriteChannelID: Int?
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingFavoriteChannelID,
+              draggingFavoriteChannelID != targetChannelID
+        else { return }
+        var settings = ChannelSettings(favoriteChannelIDs: favoriteChannelIDs)
+        settings.moveFavorite(channelID: draggingFavoriteChannelID, toDropTarget: targetChannelID)
+        favoriteChannelIDs = settings.favoriteChannelIDs
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingFavoriteChannelID = nil
+        return true
     }
 }
 
