@@ -45,7 +45,10 @@ struct ContentView: View {
         }
         .overlay {
             if model.isSettingsPresented {
-                SettingsView(model: model) {
+                SettingsView(
+                    model: model,
+                    requiresEPGStationConnection: model.isEPGStationSetupRequired
+                ) {
                     model.dismissSettings()
                 }
             }
@@ -105,11 +108,11 @@ struct ContentView: View {
                             focused: model.focusedIndex == index,
                             dropTarget: dragTargetIndex == index,
                             volumePercent: tile.volumePercent,
-                            showStreamInfo: model.settings.showStreamInfoOverlay ?? true,
+                            showStreamInfo: model.settings.showStreamInfoOverlay ?? false,
                             showFocusRing: windowChrome.isHovering,
                             topOverlayInset: topOverlayInset,
                             channelProgramInfo: model.channelProgramOverlayInfo(for: tile),
-                            channelProgramOverlayVisibility: model.settings.channelProgramOverlayVisibility ?? .always
+                            channelProgramOverlayVisibility: model.settings.channelProgramOverlayVisibility ?? .onHover
                         ) {
                             if tile.stream != nil {
                                 model.focus(index)

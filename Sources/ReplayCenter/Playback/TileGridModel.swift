@@ -14,6 +14,7 @@ final class TileGridModel {
     var channelCatalog: ChannelCatalogModel?
     var defaultVolumePercent: Int
     var isSettingsPresented = false
+    var isEPGStationSetupRequired = false
     @ObservationIgnored var onLayoutChanged: ((TileLayoutConfig) -> Void)?
     @ObservationIgnored var onSettingsChanged: ((AppSettings) -> Void)?
     @ObservationIgnored var onSettingsPresentationChanged: ((Bool) -> Void)?
@@ -295,7 +296,10 @@ final class TileGridModel {
         focus(focusedIndex)
     }
 
-    func presentSettings() {
+    func presentSettings(requiresEPGStationConnection: Bool = false) {
+        if requiresEPGStationConnection {
+            isEPGStationSetupRequired = true
+        }
         guard !isSettingsPresented else { return }
         isSettingsPresented = true
         onSettingsPresentationChanged?(true)
@@ -303,8 +307,14 @@ final class TileGridModel {
 
     func dismissSettings() {
         guard isSettingsPresented else { return }
+        guard !isEPGStationSetupRequired else { return }
         isSettingsPresented = false
         onSettingsPresentationChanged?(false)
+    }
+
+    func completeEPGStationSetup() {
+        isEPGStationSetupRequired = false
+        dismissSettings()
     }
 
     func increaseTileCapacity() {
@@ -344,13 +354,14 @@ final class TileGridModel {
         tileLayout: TileLayoutConfig,
         channelSettings: ChannelSettings
     ) -> Bool {
+        let mutedStatesByTileID = Dictionary(uniqueKeysWithValues: tiles.map { ($0.id, $0.isMuted) })
         guard applyTileLayout(tileLayout) else { return false }
         let normalizedVolume = VolumeLevel.normalized(settings.volumePercent)
         var settings = settings
         settings.volumePercent = normalizedVolume
         settings.keepFocusOnSingleLargeTile = settings.keepFocusOnSingleLargeTile ?? true
-        settings.showStreamInfoOverlay = settings.showStreamInfoOverlay ?? true
-        settings.channelProgramOverlayVisibility = settings.channelProgramOverlayVisibility ?? .always
+        settings.showStreamInfoOverlay = settings.showStreamInfoOverlay ?? false
+        settings.channelProgramOverlayVisibility = settings.channelProgramOverlayVisibility ?? .onHover
         settings.programGenreDisplaySettings = settings.programGenreDisplaySettings
             ?? self.settings.programGenreDisplaySettings
             ?? .preset
@@ -370,6 +381,7 @@ final class TileGridModel {
         defaultVolumePercent = normalizedVolume
         applyPlaybackProfilesToTiles(restartPolicy: .whenPlaybackPipelineChanges)
         focus(focusedIndex)
+        restoreMutedStates(mutedStatesByTileID)
         onSettingsChanged?(settings)
         return true
     }
@@ -386,6 +398,13 @@ final class TileGridModel {
 
     private func notifyFocusedTitleChanged() {
         onFocusedTitleChanged?(focusedWindowTitle)
+    }
+
+    private func restoreMutedStates(_ mutedStatesByTileID: [UUID: Bool]) {
+        for tile in tiles {
+            guard let isMuted = mutedStatesByTileID[tile.id] else { continue }
+            tile.setMuted(isMuted)
+        }
     }
 
     private func updateEPGStationClientIfNeeded(previousBaseURL: URL?) {

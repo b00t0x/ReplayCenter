@@ -139,6 +139,9 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         window.contentView = NSHostingView(rootView: view)
         installWindowHoverTracking(for: window)
         window.makeKeyAndOrderFront(nil)
+        Task { [weak self] in
+            await self?.presentSettingsIfEPGStationUnavailable()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -226,6 +229,24 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         if let activity {
             ProcessInfo.processInfo.endActivity(activity)
             self.activity = nil
+        }
+    }
+
+    private func presentSettingsIfEPGStationUnavailable() async {
+        guard configSource == nil, let tileGrid else { return }
+        guard !(await canConnectToEPGStation(baseURL: config.epgStationBaseURL)) else { return }
+        fputs("[app] EPGStation setup required\n", stderr)
+        tileGrid.presentSettings(requiresEPGStationConnection: true)
+    }
+
+    private func canConnectToEPGStation(baseURL: URL?) async -> Bool {
+        guard let baseURL else { return false }
+        do {
+            _ = try await EPGStationClient(baseURL: baseURL).fetchConfig()
+            return true
+        } catch {
+            fputs("[app] EPGStation config probe failed error=\(error)\n", stderr)
+            return false
         }
     }
 
@@ -470,10 +491,10 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
                 : "フルスクリーンにする"
             return window != nil && overlayBaseContentSize == nil
         case #selector(toggleStreamInfoOverlay(_:)):
-            menuItem.state = (tileGrid?.settings.showStreamInfoOverlay ?? true) ? .on : .off
+            menuItem.state = (tileGrid?.settings.showStreamInfoOverlay ?? false) ? .on : .off
             return tileGrid != nil
         case #selector(toggleChannelProgramOverlayAlways(_:)):
-            menuItem.state = (tileGrid?.settings.channelProgramOverlayVisibility ?? .always) == .always
+            menuItem.state = (tileGrid?.settings.channelProgramOverlayVisibility ?? .onHover) == .always
                 ? .on
                 : .off
             return tileGrid != nil
@@ -502,13 +523,13 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
     @objc private func toggleStreamInfoOverlay(_ sender: Any?) {
         guard let tileGrid else { return }
-        let currentValue = tileGrid.settings.showStreamInfoOverlay ?? true
+        let currentValue = tileGrid.settings.showStreamInfoOverlay ?? false
         tileGrid.setShowStreamInfoOverlay(!currentValue)
     }
 
     @objc private func toggleChannelProgramOverlayAlways(_ sender: Any?) {
         guard let tileGrid else { return }
-        let currentValue = tileGrid.settings.channelProgramOverlayVisibility ?? .always
+        let currentValue = tileGrid.settings.channelProgramOverlayVisibility ?? .onHover
         tileGrid.setChannelProgramOverlayVisibility(currentValue == .onHover ? .always : .onHover)
     }
 

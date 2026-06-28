@@ -190,8 +190,8 @@ struct AppSettings: Codable, Equatable {
             epgStationBaseURL: config.epgStationBaseURL,
             volumePercent: VolumeLevel.normalized(config.volumePercent),
             keepFocusOnSingleLargeTile: config.keepFocusOnSingleLargeTile ?? true,
-            showStreamInfoOverlay: true,
-            channelProgramOverlayVisibility: .always,
+            showStreamInfoOverlay: false,
+            channelProgramOverlayVisibility: .onHover,
             programGenreDisplaySettings: .preset,
             largeTilePlayback: config.largeTilePlayback ?? config.defaultPlaybackProfile,
             smallTilePlayback: config.smallTilePlayback ?? config.defaultPlaybackProfile
@@ -206,8 +206,8 @@ struct AppSettings: Codable, Equatable {
             keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile
                 ?? config.keepFocusOnSingleLargeTile
                 ?? true,
-            showStreamInfoOverlay: showStreamInfoOverlay ?? true,
-            channelProgramOverlayVisibility: channelProgramOverlayVisibility ?? .always,
+            showStreamInfoOverlay: showStreamInfoOverlay ?? false,
+            channelProgramOverlayVisibility: channelProgramOverlayVisibility ?? .onHover,
             programGenreDisplaySettings: programGenreDisplaySettings ?? .preset,
             largeTilePlayback: largeTilePlayback
                 ?? config.largeTilePlayback

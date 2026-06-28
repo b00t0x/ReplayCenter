@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Bindable var model: TileGridModel
+    let requiresEPGStationConnection: Bool
     let onClose: () -> Void
     @State private var selectedSection: SettingsSection = .general
     @State private var epgStationBaseURLText: String
@@ -24,12 +25,16 @@ struct SettingsView: View {
     @State private var hiddenChannelIDs: [Int]
     @State private var draggingFavoriteChannelID: Int?
     @State private var errorMessage: String?
+    @State private var hasVerifiedEPGStationConnection: Bool
+    @State private var isSaving = false
 
     init(
         model: TileGridModel,
+        requiresEPGStationConnection: Bool = false,
         onClose: @escaping () -> Void
     ) {
         self.model = model
+        self.requiresEPGStationConnection = requiresEPGStationConnection
         self.onClose = onClose
         _epgStationBaseURLText = State(
             initialValue: model.settings.epgStationBaseURL?.absoluteString ?? ""
@@ -47,16 +52,17 @@ struct SettingsView: View {
             initialValue: model.settings.keepFocusOnSingleLargeTile ?? true
         )
         _showStreamInfoOverlay = State(
-            initialValue: model.settings.showStreamInfoOverlay ?? true
+            initialValue: model.settings.showStreamInfoOverlay ?? false
         )
         _showChannelProgramOverlayAlways = State(
-            initialValue: (model.settings.channelProgramOverlayVisibility ?? .always) == .always
+            initialValue: (model.settings.channelProgramOverlayVisibility ?? .onHover) == .always
         )
         let programGenreDisplaySettings = model.settings.programGenreDisplaySettings ?? .preset
         _highlightedProgramGenres = State(initialValue: programGenreDisplaySettings.highlightedGenres)
         _dimmedProgramGenres = State(initialValue: programGenreDisplaySettings.dimmedGenres)
         _favoriteChannelIDs = State(initialValue: model.channelSettings.favoriteChannelIDs)
         _hiddenChannelIDs = State(initialValue: model.channelSettings.hiddenChannelIDs)
+        _hasVerifiedEPGStationConnection = State(initialValue: !requiresEPGStationConnection)
     }
 
     var body: some View {
@@ -64,7 +70,9 @@ struct SettingsView: View {
             Color.black.opacity(0.54)
                 .ignoresSafeArea()
                 .onTapGesture {
-                    onClose()
+                    if canClose {
+                        onClose()
+                    }
                 }
 
             GeometryReader { proxy in
@@ -78,7 +86,9 @@ struct SettingsView: View {
             .padding(20)
         }
         .onKeyPress(.escape) {
-            onClose()
+            if canClose {
+                onClose()
+            }
             return .handled
         }
         .task {
@@ -125,14 +135,16 @@ struct SettingsView: View {
                 .font(.title3)
                 .fontWeight(.semibold)
             Spacer()
-            Button {
-                onClose()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
+            if canClose {
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.escape, modifiers: [])
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.escape, modifiers: [])
         }
     }
 
@@ -160,6 +172,8 @@ struct SettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(isSectionLocked(section))
+                .opacity(isSectionLocked(section) ? 0.42 : 1)
             }
             Spacer()
         }
@@ -192,6 +206,11 @@ struct SettingsView: View {
                 TextField("https://epgstation.example.local/", text: $epgStationBaseURLText)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 520)
+                if requiresEPGStationConnection {
+                    Text("EPGStation に接続できる URL を保存すると、ほかの設定と視聴機能が使えるようになります。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -435,16 +454,31 @@ struct SettingsView: View {
                     .foregroundStyle(.red)
             }
             Spacer()
-            Button("キャンセル") {
-                onClose()
+            if canClose {
+                Button("キャンセル") {
+                    onClose()
+                }
+                .keyboardShortcut(.escape, modifiers: [])
             }
-            .keyboardShortcut(.escape, modifiers: [])
-            Button("保存") {
-                save()
+            Button(isSaving ? "確認中..." : "保存") {
+                Task {
+                    await save()
+                }
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.return, modifiers: [])
+            .disabled(isSaving)
         }
+    }
+
+    private var canClose: Bool {
+        !requiresEPGStationConnection
+    }
+
+    private func isSectionLocked(_ section: SettingsSection) -> Bool {
+        requiresEPGStationConnection
+            && !hasVerifiedEPGStationConnection
+            && section != .general
     }
 
     private func sectionTitle(_ title: String) -> some View {
@@ -453,12 +487,35 @@ struct SettingsView: View {
             .fontWeight(.semibold)
     }
 
-    private func save() {
+    private func save() async {
+        guard !isSaving else { return }
+        isSaving = true
+        defer {
+            isSaving = false
+        }
+
         updatePlaybackModeOptionsFromCatalog()
         let epgStationBaseURL = normalizedEPGStationBaseURL()
         if errorMessage != nil {
             return
         }
+        guard let epgStationBaseURL else {
+            errorMessage = "EPGStation URL を入力してください。"
+            return
+        }
+
+        do {
+            let config = try await EPGStationClient(baseURL: epgStationBaseURL).fetchConfig()
+            let options = config.liveStreamModeOptions(for: model.liveStreamContainer)
+            if !options.isEmpty {
+                model.setPlaybackModeOptions(options)
+            }
+            hasVerifiedEPGStationConnection = true
+        } catch {
+            errorMessage = "EPGStation に接続できません: \(error.localizedDescription)"
+            return
+        }
+
         let settings = AppSettings(
             epgStationBaseURL: epgStationBaseURL,
             volumePercent: VolumeLevel.normalized(volumePercent),
@@ -480,7 +537,11 @@ struct SettingsView: View {
             errorMessage = "保存できませんでした。"
             return
         }
-        onClose()
+        if requiresEPGStationConnection {
+            model.completeEPGStationSetup()
+        } else {
+            onClose()
+        }
     }
 
     private func playbackModeOptions(including currentMode: Int) -> [EPGStationLiveStreamModeOption] {
@@ -1332,6 +1393,7 @@ private struct TileLayoutOptionView: View {
             VStack(alignment: .leading, spacing: 7) {
                 TileLayoutPreview(layout: layout)
                     .frame(width: 108, height: 68)
+                    .frame(maxWidth: .infinity, alignment: .center)
 
                 HStack(spacing: 5) {
                     Text(layout.optionSummary)
