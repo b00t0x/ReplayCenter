@@ -9,7 +9,7 @@ private struct FixedWindowScale {
 
 @MainActor
 final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
-    private static let settingsMinimumContentSize = CGSize(width: 860, height: 560)
+    private static let settingsMinimumContentSize = CGSize(width: 1040, height: 640)
     private static let channelSelectorMinimumContentSize = CGSize(width: 560, height: 600)
     private static let tileBasePixelSize = CGSize(width: 1920, height: 1080)
     private static let fixedWindowScales = [

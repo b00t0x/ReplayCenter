@@ -307,6 +307,7 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
         TileLayoutConfig(columns: 4, rows: 2),
         TileLayoutConfig(columns: 2, rows: 4)
     ]
+    static let uniformPresets = standardPresets + wideTallPresets
     static let largePresets = [
         TileLayoutConfig(columns: 1, rows: 1),
         TileLayoutConfig.large(
@@ -432,8 +433,82 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
                 TilePlacement(x: 0, y: 2, width: 2, height: 2)
             ],
             label: "4x4 大3 右下小"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 3,
+            largeTiles: [
+                TilePlacement(x: 0, y: 0, width: 2, height: 2),
+                TilePlacement(x: 2, y: 0, width: 2, height: 2)
+            ],
+            label: "4x3 大2 上"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 3,
+            largeTiles: [
+                TilePlacement(x: 0, y: 1, width: 2, height: 2),
+                TilePlacement(x: 2, y: 1, width: 2, height: 2)
+            ],
+            label: "4x3 大2 下"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 3,
+            largeTiles: [
+                TilePlacement(x: 0, y: 0, width: 2, height: 2),
+                TilePlacement(x: 2, y: 1, width: 2, height: 2)
+            ],
+            label: "4x3 大2 斜め左"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 3,
+            largeTiles: [
+                TilePlacement(x: 2, y: 0, width: 2, height: 2),
+                TilePlacement(x: 0, y: 1, width: 2, height: 2)
+            ],
+            label: "4x3 大2 斜め右"
+        ),
+        TileLayoutConfig.large(
+            columns: 3,
+            rows: 4,
+            largeTiles: [
+                TilePlacement(x: 0, y: 0, width: 2, height: 2),
+                TilePlacement(x: 0, y: 2, width: 2, height: 2)
+            ],
+            label: "3x4 大2 左"
+        ),
+        TileLayoutConfig.large(
+            columns: 3,
+            rows: 4,
+            largeTiles: [
+                TilePlacement(x: 1, y: 0, width: 2, height: 2),
+                TilePlacement(x: 1, y: 2, width: 2, height: 2)
+            ],
+            label: "3x4 大2 右"
+        ),
+        TileLayoutConfig.large(
+            columns: 3,
+            rows: 4,
+            largeTiles: [
+                TilePlacement(x: 0, y: 0, width: 2, height: 2),
+                TilePlacement(x: 1, y: 2, width: 2, height: 2)
+            ],
+            label: "3x4 大2 斜め左"
+        ),
+        TileLayoutConfig.large(
+            columns: 3,
+            rows: 4,
+            largeTiles: [
+                TilePlacement(x: 1, y: 0, width: 2, height: 2),
+                TilePlacement(x: 0, y: 2, width: 2, height: 2)
+            ],
+            label: "3x4 大2 斜め右"
         )
     ]
+    static let singleLargePresets = largePresets.filter { $0.uiLargeTileCount == 1 }
+    static let multipleLargePresets = largePresets.filter { $0.uiLargeTileCount > 1 }
     static let presets = standardPresets
 
     init(
@@ -503,6 +578,24 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
             return "\(columns)x\(rows)"
         }
         return "\(columns)x\(rows)"
+    }
+
+    var uiLargeTileCount: Int {
+        if tileCount == 1 {
+            return 1
+        }
+        return placements.filter(\.spansMultipleCells).count
+    }
+
+    var uiSmallTileCount: Int {
+        max(tileCount - uiLargeTileCount, 0)
+    }
+
+    var optionSummary: String {
+        guard uiLargeTileCount > 0 else {
+            return "\(columns)x\(rows)"
+        }
+        return "\(columns)x\(rows) 大\(uiLargeTileCount) 小\(uiSmallTileCount)"
     }
 
     var nextLarger: TileLayoutConfig? {

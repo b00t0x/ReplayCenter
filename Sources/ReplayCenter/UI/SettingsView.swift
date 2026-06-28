@@ -57,8 +57,8 @@ struct SettingsView: View {
             GeometryReader { proxy in
                 settingsPanel
                     .frame(
-                        width: max(min(proxy.size.width - 40, 1040), 320),
-                        height: max(min(proxy.size.height - 40, 720), 360)
+                        width: max(min(proxy.size.width - 40, 1120), 420),
+                        height: max(min(proxy.size.height - 40, 760), 420)
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
@@ -201,6 +201,7 @@ struct SettingsView: View {
             }
 
             Toggle("ホバー時にストリーム情報を表示", isOn: $showStreamInfoOverlay)
+                .toggleStyle(.switch)
 
             VStack(alignment: .leading, spacing: 12) {
                 Text("ストリーム")
@@ -233,6 +234,7 @@ struct SettingsView: View {
             sectionTitle("タイル")
 
             Toggle("フォーカス時にラージタイルへ入れ替え", isOn: $keepFocusOnSingleLargeTile)
+                .toggleStyle(.switch)
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("配置")
@@ -636,42 +638,42 @@ private struct FavoriteChannelDropDelegate: DropDelegate {
 }
 
 private enum TileLayoutCategory: String, CaseIterable, Identifiable {
-    case standard
-    case wideTall
-    case large
+    case uniform
+    case singleLarge
+    case multipleLarge
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .standard:
-            return "標準"
-        case .wideTall:
-            return "縦横"
-        case .large:
-            return "ラージ"
+        case .uniform:
+            return "均等配置"
+        case .singleLarge:
+            return "大小タイル"
+        case .multipleLarge:
+            return "複数大"
         }
     }
 
     var layouts: [TileLayoutConfig] {
         switch self {
-        case .standard:
-            return TileLayoutConfig.standardPresets
-        case .wideTall:
-            return TileLayoutConfig.wideTallPresets
-        case .large:
-            return TileLayoutConfig.largePresets
+        case .uniform:
+            return TileLayoutConfig.uniformPresets
+        case .singleLarge:
+            return TileLayoutConfig.singleLargePresets
+        case .multipleLarge:
+            return TileLayoutConfig.multipleLargePresets
         }
     }
 
     static func category(for layout: TileLayoutConfig) -> TileLayoutCategory {
-        if large.layouts.contains(where: { layout.hasSameShape(as: $0) }) {
-            return .large
+        if layout.uiLargeTileCount > 1 {
+            return .multipleLarge
         }
-        if wideTall.layouts.contains(where: { layout.hasSameShape(as: $0) }) {
-            return .wideTall
+        if layout.uiLargeTileCount == 1 {
+            return .singleLarge
         }
-        return .standard
+        return .uniform
     }
 }
 
@@ -687,7 +689,7 @@ private struct TileLayoutOptionView: View {
                     .frame(width: 108, height: 68)
 
                 HStack(spacing: 5) {
-                    Text(layout.summary)
+                    Text(layout.optionSummary)
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                     Spacer(minLength: 0)
@@ -706,7 +708,7 @@ private struct TileLayoutOptionView: View {
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
-        .help(layout.summary)
+        .help(layout.optionSummary)
     }
 }
 
