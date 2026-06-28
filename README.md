@@ -60,34 +60,34 @@ settings. `config.local.json` is no longer loaded implicitly. Real EPGStation
 hosts, channel IDs, tokens, and other private values should stay out of
 committed files.
 
-Important defaults:
+`config.example.json` is a representative debug config rather than a minimal
+normal-use config. For normal app use, set the EPGStation URL from the settings
+screen and let ReplayCenter manage runtime state. Use JSON config when you want
+to launch with fixed debug inputs and ignore saved runtime settings for that
+launch.
 
-- `epgStationBaseURL`: EPGStation host URL used by the channel selection layer
-- `liveStreamContainer`: `m2ts` or `m2tsll`
-- `liveStreamMode`: fallback EPGStation live stream mode, with `0` commonly used for unconverted `m2ts`
-- `largeTilePlayback` / `smallTilePlayback`: EPGStation live stream mode and
-  deinterlace mode used for channel selection on large and small tiles
-- `tileLayout`: fixed tile grid, for example `{ "columns": 3, "rows": 2 }`
-- `startupStreams`: `configured` starts streams from config, `empty` starts with unassigned tiles
-- `keepFocusOnSingleLargeTile`: when a layout has exactly one large tile,
-  focusing a small tile swaps it into the large tile. Defaults to `true` and
-  can be toggled from the View menu.
-- `showStreamInfoOverlay`: saved runtime setting that shows stream details on
-  the tile hover overlay. Legacy `showInputClockOverlay` state is still read.
-- `deinterlace`: fallback deinterlace mode, for example `yadif`
-- `networkCachingMs`: `1000`
-- `volumePercent`: global playback volume, clamped to `0` through `100` and
-  rounded to 5% steps
-- `audioOnlyFocusedTile`: `true`
-- `dualMonoFilter`: helper process settings. `muxSelectedToStereo` defaults to
-  `false`, which is the current stable setting from the PoC validation.
+Representative debug config keys:
 
-`filterPath` can usually stay unset. During development ReplayCenter looks for a
-`ReplayCenterStreamFilter` executable next to the app binary or in
-`.build/debug` / `.build/release`. Set `REPLAYCENTER_STREAM_FILTER_PATH` or
-`dualMonoFilter.filterPath` when using a custom helper path. The legacy
-`REPLAYCENTER_TS_FILTER_PATH` environment variable is still accepted during the
-rename transition.
+- `epgStationBaseURL`: EPGStation host URL used by channel selection.
+- `streams`: fixed startup streams for direct URL playback tests. Leave empty
+  for normal EPGStation channel selection.
+- `tileLayout`: optional fixed tile grid for a debug launch, for example
+  `{ "columns": 3, "rows": 2 }`, or explicit `placements` for non-uniform
+  layouts.
+- `liveStreamContainer`, `largeTilePlayback`, and `smallTilePlayback`: playback
+  defaults used before runtime settings are saved.
+- `streams[].deinterlace`: per-stream deinterlace mode for fixed URL playback
+  tests.
+- `networkCachingMs`, `vlcArguments`, and `mediaOptions`: low-level playback
+  experiments.
+- `volumePercent` and `keepFocusOnSingleLargeTile`: startup behavior overrides
+  for reproducible debug launches.
+- `streams[].audioMode`: initial audio selection override for fixed debug
+  streams. Use `left` for primary audio or `right` for secondary audio.
+- `streamFilter.filterPath`: custom helper executable path. Usually this can
+  stay unset because ReplayCenter looks for `ReplayCenterStreamFilter` next to
+  the app binary or in `.build/debug` / `.build/release`. The
+  `REPLAYCENTER_STREAM_FILTER_PATH` environment variable can also override it.
 
 For EPGStation channel selection, playback profiles are applied by tile size.
 Mode names are loaded from EPGStation's `/api/config` `streamConfig` response.
@@ -176,7 +176,7 @@ Tile playback state is intentionally minimal:
 
 The pipeline logs stream and helper exits with the tile label. If playback
 fails, check the terminal output for `stream input ended`,
-`dual mono filter exited`, or
+`stream filter exited`, or
 `playback failed`.
 
 The focused tile controls currently show audio stream detection state for

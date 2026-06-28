@@ -22,7 +22,6 @@ final class TileGridModel {
     @ObservationIgnored var onFocusedChannelSelectionRequested: (() -> Void)?
     private var config: AppConfig
     private let instance: VLCInstance
-    private let audioOnlyFocusedTile: Bool
     private var epgStationClient: EPGStationClient?
 
     init(config: AppConfig, instance: VLCInstance, restoredState: AppState? = nil) {
@@ -39,7 +38,7 @@ final class TileGridModel {
         var config = config
         config.volumePercent = initialVolumePercent
         self.config = config
-        let initialStreams = config.startupStreams == .empty ? [] : config.streams
+        let initialStreams = config.streams
         let initialLayout = (restoredState?.tileLayout ?? config.tileLayout ?? .automatic(tileCount: max(initialStreams.count, 1)))
             .validOrFallback
             .fitting(streamCount: initialStreams.count)
@@ -51,7 +50,6 @@ final class TileGridModel {
                 instance: instance
             )
         }
-        self.audioOnlyFocusedTile = config.audioOnlyFocusedTile ?? true
         if let epgStationBaseURL = config.epgStationBaseURL {
             let client = EPGStationClient(baseURL: epgStationBaseURL)
             self.epgStationClient = client
@@ -96,7 +94,7 @@ final class TileGridModel {
     }
 
     var focusedTileAudioSelection: AudioSelection {
-        guard tiles.indices.contains(focusedIndex) else { return AudioSelection(audioMode: .stereo) }
+        guard tiles.indices.contains(focusedIndex) else { return .primary }
         return tiles[focusedIndex].currentAudioSelection
     }
 
@@ -134,7 +132,6 @@ final class TileGridModel {
         guard tiles.indices.contains(index) else { return }
         focusedIndex = index
         notifyFocusedTitleChanged()
-        guard audioOnlyFocusedTile else { return }
 
         for (tileIndex, tile) in tiles.enumerated() {
             tile.setMuted(tileIndex != index)
@@ -274,7 +271,6 @@ final class TileGridModel {
             isUnconvertedPlayback: modeOption?.isUnconverted,
             title: title,
             url: url.absoluteString,
-            muted: nil,
             audioMode: nil,
             deinterlace: profile.deinterlaceForPlayback(isUnconverted: modeOption?.isUnconverted),
             mediaOptions: nil
@@ -284,7 +280,7 @@ final class TileGridModel {
     private func playbackProfile(for tileIndex: Int) -> TilePlaybackProfile {
         let isLargeTile = layout.tileCount == 1
             || layout.placement(at: tileIndex)?.spansMultipleCells == true
-        let fallback = config.defaultPlaybackProfile
+        let fallback = TilePlaybackProfile.fallback
         if isLargeTile {
             return settings.largeTilePlayback ?? config.largeTilePlayback ?? fallback
         }
@@ -296,7 +292,9 @@ final class TileGridModel {
     }
 
     func setPlaybackModeOptions(_ options: [EPGStationLiveStreamModeOption]) {
-        let normalizedOptions = options.isEmpty ? [.fallback(mode: config.liveStreamMode ?? 0)] : options
+        let normalizedOptions = options.isEmpty
+            ? [.fallback(mode: TilePlaybackProfile.fallback.liveStreamMode)]
+            : options
         guard playbackModeOptions != normalizedOptions else { return }
         playbackModeOptions = normalizedOptions
         updatePlaybackMetadataForTiles()
@@ -398,11 +396,11 @@ final class TileGridModel {
         settings.largeTilePlayback = settings.largeTilePlayback
             ?? self.settings.largeTilePlayback
             ?? config.largeTilePlayback
-            ?? config.defaultPlaybackProfile
+            ?? TilePlaybackProfile.fallback
         settings.smallTilePlayback = settings.smallTilePlayback
             ?? self.settings.smallTilePlayback
             ?? config.smallTilePlayback
-            ?? config.defaultPlaybackProfile
+            ?? TilePlaybackProfile.fallback
         let previousBaseURL = config.epgStationBaseURL
         self.settings = settings
         self.channelSettings = channelSettings.normalized
@@ -442,13 +440,13 @@ final class TileGridModel {
         guard let epgStationBaseURL = config.epgStationBaseURL else {
             epgStationClient = nil
             channelCatalog = nil
-            playbackModeOptions = [.fallback(mode: config.liveStreamMode ?? 0)]
+            playbackModeOptions = [.fallback(mode: TilePlaybackProfile.fallback.liveStreamMode)]
             return
         }
         let client = EPGStationClient(baseURL: epgStationBaseURL)
         epgStationClient = client
         channelCatalog = ChannelCatalogModel(client: client)
-        playbackModeOptions = [.fallback(mode: config.liveStreamMode ?? 0)]
+        playbackModeOptions = [.fallback(mode: TilePlaybackProfile.fallback.liveStreamMode)]
     }
 
     private enum PlaybackProfileRestartPolicy {

@@ -1,37 +1,43 @@
 {
-  "windowTitle": "ReplayCenter",
   "epgStationBaseURL": "https://epgstation.example.local/",
   "liveStreamContainer": "m2ts",
-  "liveStreamMode": 0,
-  "vlcArguments": [],
-  "networkCachingMs": 1000,
-  "deinterlace": "yadif",
   "largeTilePlayback": {
     "liveStreamMode": 0,
-    "deinterlace": "yadif"
+    "deinterlace": "yadif2x"
   },
   "smallTilePlayback": {
     "liveStreamMode": 0,
     "deinterlace": "yadif"
   },
-  "mediaOptions": [],
+  "networkCachingMs": 1000,
   "volumePercent": 100,
-  "dualMonoFilter": {
+  "keepFocusOnSingleLargeTile": true,
+  "vlcArguments": [],
+  "mediaOptions": [],
+  "streamFilter": {
     "filterPath": null,
     "muxSelectedToStereo": false
   },
-  "audioOnlyFocusedTile": true,
-  "startMuted": true,
-  "audioMode": "stereo",
   "tileLayout": {
-    "columns": 1,
-    "rows": 1
+    "columns": 3,
+    "rows": 3,
+    "label": "3x3 large top-left",
+    "placements": [
+      { "x": 0, "y": 0, "width": 2, "height": 2 },
+      { "x": 2, "y": 0, "width": 1, "height": 1 },
+      { "x": 2, "y": 1, "width": 1, "height": 1 },
+      { "x": 0, "y": 2, "width": 1, "height": 1 },
+      { "x": 1, "y": 2, "width": 1, "height": 1 },
+      { "x": 2, "y": 2, "width": 1, "height": 1 }
+    ]
   },
-  "startupStreams": "configured",
   "streams": [
     {
-      "title": "Example MPEG2 raw TS",
-      "url": "https://epgstation.example.local/api/streams/live/CHANNEL_ID/m2ts?mode=0"
+      "title": "Example fixed live stream",
+      "url": "https://epgstation.example.local/api/streams/live/CHANNEL_ID/m2ts?mode=0",
+      "audioMode": "left",
+      "deinterlace": "yadif",
+      "mediaOptions": []
     }
   ]
 }

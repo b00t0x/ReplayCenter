@@ -16,7 +16,7 @@ final class TileModel: Identifiable {
     let player: Player
     private let config: AppConfig
     private var started = false
-    private var dualMonoFilterPipeline: DualMonoFilterPipeline?
+    private var streamFilterPipeline: StreamFilterPipeline?
     private var activePipelineID: UUID?
 
     init(stream: StreamConfig?, config: AppConfig, instance: VLCInstance) {
@@ -26,8 +26,8 @@ final class TileModel: Identifiable {
         playbackState = .idle
         audioStreamState = .unknown
         broadcastClockState = nil
-        currentAudioSelection = AudioSelection(audioMode: stream?.audioMode ?? config.audioMode ?? .stereo)
-        isMuted = stream?.muted ?? config.startMuted ?? true
+        currentAudioSelection = AudioSelection(audioMode: stream?.audioMode ?? .left)
+        isMuted = true
         volumePercent = VolumeLevel.normalized(config.volumePercent)
         try? player.setAudioVolume(Volume(Float(volumePercent) / 100.0))
         player.isMuted = isMuted
@@ -62,8 +62,8 @@ final class TileModel: Identifiable {
         broadcastClockState = nil
         activePipelineID = nil
         player.stop()
-        dualMonoFilterPipeline?.stop()
-        dualMonoFilterPipeline = nil
+        streamFilterPipeline?.stop()
+        streamFilterPipeline = nil
         setMuted(true)
     }
 
@@ -86,7 +86,7 @@ final class TileModel: Identifiable {
         currentAudioSelection = selection
         let mode = selection.filterAudioMode
         player.stereoMode = mode.stereoMode
-        dualMonoFilterPipeline?.setAudioMode(mode)
+        streamFilterPipeline?.setAudioMode(mode)
     }
 
     func reload() {
@@ -101,8 +101,8 @@ final class TileModel: Identifiable {
         broadcastClockState = nil
         activePipelineID = nil
         player.stop()
-        dualMonoFilterPipeline?.stop()
-        dualMonoFilterPipeline = nil
+        streamFilterPipeline?.stop()
+        streamFilterPipeline = nil
         await player.shutdown()
     }
 
@@ -113,29 +113,29 @@ final class TileModel: Identifiable {
             log("invalid url=\(stream.url)")
             return
         }
-        currentAudioSelection = AudioSelection(audioMode: stream.audioMode ?? config.audioMode ?? .stereo)
+        currentAudioSelection = AudioSelection(audioMode: stream.audioMode ?? .left)
         player.stereoMode = currentAudioSelection.filterAudioMode.stereoMode
         playbackState = .starting
         audioStreamState = .unknown
         broadcastClockState = nil
         activePipelineID = nil
         player.stop()
-        dualMonoFilterPipeline?.stop()
-        dualMonoFilterPipeline = nil
+        streamFilterPipeline?.stop()
+        streamFilterPipeline = nil
 
         do {
             let pipelineID = UUID()
-            let pipeline = DualMonoFilterPipeline(
+            let pipeline = StreamFilterPipeline(
                 streamURL: url.absoluteString,
                 label: stream.title ?? stream.url,
-                config: config.dualMonoFilter ?? .default
+                config: config.streamFilter ?? .default
             ) { [weak self] event in
                 Task { @MainActor in
                     self?.handlePipelineEvent(event, pipelineID: pipelineID)
                 }
             }
             activePipelineID = pipelineID
-            dualMonoFilterPipeline = pipeline
+            streamFilterPipeline = pipeline
             let media = try pipeline.start(initialMode: currentAudioSelection.filterAudioMode)
             if let networkCachingMs = config.networkCachingMs {
                 media.addOption(":network-caching=\(networkCachingMs)")
@@ -152,17 +152,17 @@ final class TileModel: Identifiable {
             applyDeinterlaceIfNeeded()
             try player.play(media)
             playbackState = .playing
-            log("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel) volume=\(volumePercent) audioSelection=\(currentAudioSelection.rawValue) filter=\((config.dualMonoFilter ?? .default).summary)")
+            log("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel) volume=\(volumePercent) audioSelection=\(currentAudioSelection.rawValue) filter=\((config.streamFilter ?? .default).summary)")
         } catch {
             playbackState = .failed(error.localizedDescription)
             activePipelineID = nil
-            dualMonoFilterPipeline?.stop()
-            dualMonoFilterPipeline = nil
+            streamFilterPipeline?.stop()
+            streamFilterPipeline = nil
             log("play failed error=\(error)")
         }
     }
 
-    private func handlePipelineEvent(_ event: DualMonoFilterPipelineEvent, pipelineID: UUID) {
+    private func handlePipelineEvent(_ event: StreamFilterPipelineEvent, pipelineID: UUID) {
         guard activePipelineID == pipelineID else { return }
 
         switch event {
@@ -171,7 +171,7 @@ final class TileModel: Identifiable {
             audioStreamState = state
             log("audio state changed state=\(state.rawValue)")
             if state.supportsAudioSelectionControls {
-                dualMonoFilterPipeline?.setAudioMode(currentAudioSelection.filterAudioMode)
+                streamFilterPipeline?.setAudioMode(currentAudioSelection.filterAudioMode)
             }
         case let .broadcastClockChanged(state):
             broadcastClockState = state
@@ -182,7 +182,7 @@ final class TileModel: Identifiable {
                 failPlayback("stream input ended")
             }
         case let .filterExited(status, reason):
-            failPlayback("dual mono filter exited status=\(status) reason=\(reason)")
+            failPlayback("stream filter exited status=\(status) reason=\(reason)")
         }
     }
 
@@ -190,8 +190,8 @@ final class TileModel: Identifiable {
         playbackState = .failed(message)
         activePipelineID = nil
         player.stop()
-        dualMonoFilterPipeline?.stop()
-        dualMonoFilterPipeline = nil
+        streamFilterPipeline?.stop()
+        streamFilterPipeline = nil
         log("playback failed \(message)")
     }
 
@@ -214,12 +214,11 @@ final class TileModel: Identifiable {
     }
 
     private var effectiveDeinterlaceLabel: String {
-        guard let stream else { return config.effectiveDeinterlaceLabel }
-        let streamValue = stream.deinterlace?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let streamValue = stream?.deinterlace?.trimmingCharacters(in: .whitespacesAndNewlines)
         if streamValue?.isEmpty == false {
             return streamValue!
         }
-        return config.effectiveDeinterlaceLabel
+        return "<unchanged>"
     }
 
     func streamInfoText(displayPixelSize: CGSize?) -> String {

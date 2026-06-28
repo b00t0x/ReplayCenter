@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import SwiftVLC
 
-enum DualMonoFilterPipelineEvent: Sendable {
+enum StreamFilterPipelineEvent: Sendable {
     case audioStateChanged(AudioStreamState)
     case broadcastClockChanged(BroadcastClockState)
     case streamInputEnded(error: String?)
@@ -20,11 +20,11 @@ struct BroadcastClockState: Equatable, Sendable {
 }
 
 @MainActor
-final class DualMonoFilterPipeline {
+final class StreamFilterPipeline {
     private let streamURL: String
     private let label: String
-    private let config: DualMonoFilterConfig
-    private let onEvent: @Sendable (DualMonoFilterPipelineEvent) -> Void
+    private let config: StreamFilterConfig
+    private let onEvent: @Sendable (StreamFilterPipelineEvent) -> Void
     private var streamPump: HTTPStreamPump?
     private var filterProcess: Process?
     private var filterInputPipe: Pipe?
@@ -36,8 +36,8 @@ final class DualMonoFilterPipeline {
     init(
         streamURL: String,
         label: String,
-        config: DualMonoFilterConfig,
-        onEvent: @escaping @Sendable (DualMonoFilterPipelineEvent) -> Void
+        config: StreamFilterConfig,
+        onEvent: @escaping @Sendable (StreamFilterPipelineEvent) -> Void
     ) {
         self.streamURL = streamURL
         self.label = label
@@ -69,7 +69,7 @@ final class DualMonoFilterPipeline {
         let onEvent = onEvent
         filterProcess.terminationHandler = { [label, onEvent] process in
             fputs(
-                "[\(label)] dual mono filter exited status=\(process.terminationStatus) reason=\(process.terminationReason.rawValue)\n",
+                "[\(label)] stream filter exited status=\(process.terminationStatus) reason=\(process.terminationReason.rawValue)\n",
                 stderr
             )
             onEvent(.filterExited(
@@ -161,11 +161,6 @@ final class DualMonoFilterPipeline {
             return absolutePath(envPath)
         }
 
-        if let envPath = ProcessInfo.processInfo.environment["REPLAYCENTER_TS_FILTER_PATH"],
-           !envPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return absolutePath(envPath)
-        }
-
         let fileManager = FileManager.default
         let candidates = defaultFilterExecutableCandidates()
         if let path = candidates.first(where: { fileManager.isExecutableFile(atPath: $0) }) {
@@ -206,7 +201,7 @@ private final class HTTPStreamPump: NSObject, URLSessionDataDelegate, @unchecked
     private let url: URL
     private let label: String
     private let outputFileHandle: FileHandle
-    private let onEvent: @Sendable (DualMonoFilterPipelineEvent) -> Void
+    private let onEvent: @Sendable (StreamFilterPipelineEvent) -> Void
     private let lock = NSLock()
     private var session: URLSession?
     private var task: URLSessionDataTask?
@@ -218,7 +213,7 @@ private final class HTTPStreamPump: NSObject, URLSessionDataDelegate, @unchecked
         url: URL,
         label: String,
         outputFileHandle: FileHandle,
-        onEvent: @escaping @Sendable (DualMonoFilterPipelineEvent) -> Void
+        onEvent: @escaping @Sendable (StreamFilterPipelineEvent) -> Void
     ) {
         self.url = url
         self.label = label
@@ -347,12 +342,12 @@ private final class HTTPStreamPump: NSObject, URLSessionDataDelegate, @unchecked
 
 private final class FilterStatusReader: @unchecked Sendable {
     private let label: String
-    private let onEvent: @Sendable (DualMonoFilterPipelineEvent) -> Void
+    private let onEvent: @Sendable (StreamFilterPipelineEvent) -> Void
     private let lock = NSLock()
     private var buffer = Data()
     private weak var fileHandle: FileHandle?
 
-    init(label: String, onEvent: @escaping @Sendable (DualMonoFilterPipelineEvent) -> Void) {
+    init(label: String, onEvent: @escaping @Sendable (StreamFilterPipelineEvent) -> Void) {
         self.label = label
         self.onEvent = onEvent
     }
@@ -458,8 +453,6 @@ private final class FilterStatusReader: @unchecked Sendable {
 private extension AudioMode {
     var signal: Int32 {
         switch self {
-        case .stereo:
-            return SIGHUP
         case .left:
             return SIGUSR1
         case .right:

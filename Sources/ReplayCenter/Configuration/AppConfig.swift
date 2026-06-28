@@ -1,81 +1,49 @@
 import Foundation
 
 struct AppConfig: Decodable {
-    var windowTitle: String?
     var epgStationBaseURL: URL?
     var liveStreamContainer: LiveStreamContainer?
-    var liveStreamMode: Int?
     var vlcArguments: [String]?
     var networkCachingMs: Int?
-    var deinterlace: String?
     var mediaOptions: [String]?
-    var dualMonoFilter: DualMonoFilterConfig?
+    var streamFilter: StreamFilterConfig?
     var volumePercent: Int?
-    var audioOnlyFocusedTile: Bool?
-    var startMuted: Bool?
-    var audioMode: AudioMode?
     var tileLayout: TileLayoutConfig?
-    var startupStreams: StartupStreamsMode?
     var keepFocusOnSingleLargeTile: Bool?
     var largeTilePlayback: TilePlaybackProfile?
     var smallTilePlayback: TilePlaybackProfile?
     var streams: [StreamConfig]
 
     static let empty = AppConfig(
-        windowTitle: "ReplayCenter",
         epgStationBaseURL: nil,
         liveStreamContainer: .m2ts,
-        liveStreamMode: 0,
         vlcArguments: [],
         networkCachingMs: 1000,
-        deinterlace: "yadif",
         mediaOptions: [],
-        dualMonoFilter: .default,
+        streamFilter: .default,
         volumePercent: 100,
-        audioOnlyFocusedTile: true,
-        startMuted: true,
-        audioMode: .stereo,
         tileLayout: nil,
-        startupStreams: .configured,
         keepFocusOnSingleLargeTile: true,
         largeTilePlayback: nil,
         smallTilePlayback: nil,
         streams: []
     )
 
-    var effectiveDeinterlaceLabel: String {
-        let value = deinterlace?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value?.isEmpty == false ? value! : "<unchanged>"
-    }
-
     var summary: String {
         [
             "streams=\(streams.count)",
             "epgStationBaseURL=\(epgStationBaseURL?.absoluteString ?? "<nil>")",
             "liveStreamContainer=\(liveStreamContainer?.rawValue ?? "<nil>")",
-            "liveStreamMode=\(liveStreamMode.map(String.init) ?? "<nil>")",
-            "deinterlace=\(effectiveDeinterlaceLabel)",
             "networkCachingMs=\(networkCachingMs.map(String.init) ?? "<nil>")",
             "volumePercent=\(volumePercent.map(String.init) ?? "<nil>")",
-            "audioOnlyFocusedTile=\(audioOnlyFocusedTile.map(String.init) ?? "<nil>")",
-            "startMuted=\(startMuted.map(String.init) ?? "<nil>")",
-            "audioMode=\(audioMode?.rawValue ?? "<nil>")",
             "tileLayout=\(tileLayout?.summary ?? "<auto>")",
-            "startupStreams=\(startupStreams?.rawValue ?? "<nil>")",
             "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")",
-            "largeTilePlayback=\((largeTilePlayback ?? defaultPlaybackProfile).summary)",
-            "smallTilePlayback=\((smallTilePlayback ?? defaultPlaybackProfile).summary)",
-            "dualMonoFilter=\((dualMonoFilter ?? .default).summary)",
+            "largeTilePlayback=\((largeTilePlayback ?? TilePlaybackProfile.fallback).summary)",
+            "smallTilePlayback=\((smallTilePlayback ?? TilePlaybackProfile.fallback).summary)",
+            "streamFilter=\((streamFilter ?? .default).summary)",
             "vlcArguments=\(vlcArguments ?? [])",
             "mediaOptions=\(mediaOptions ?? [])"
         ].joined(separator: " ")
-    }
-
-    var defaultPlaybackProfile: TilePlaybackProfile {
-        TilePlaybackProfile(
-            liveStreamMode: liveStreamMode ?? 0,
-            deinterlace: effectiveDeinterlaceLabel
-        )
     }
 }
 
@@ -110,7 +78,6 @@ struct AppSettings: Codable, Equatable {
         case volumePercent
         case keepFocusOnSingleLargeTile
         case showStreamInfoOverlay
-        case showInputClockOverlay
         case channelProgramOverlayVisibility
         case programGenreDisplaySettings
         case largeTilePlayback
@@ -143,7 +110,6 @@ struct AppSettings: Codable, Equatable {
         volumePercent = try container.decodeIfPresent(Int.self, forKey: .volumePercent)
         keepFocusOnSingleLargeTile = try container.decodeIfPresent(Bool.self, forKey: .keepFocusOnSingleLargeTile)
         showStreamInfoOverlay = try container.decodeIfPresent(Bool.self, forKey: .showStreamInfoOverlay)
-            ?? container.decodeIfPresent(Bool.self, forKey: .showInputClockOverlay)
         channelProgramOverlayVisibility = try container.decodeIfPresent(
             ChannelProgramOverlayVisibility.self,
             forKey: .channelProgramOverlayVisibility
@@ -193,13 +159,12 @@ struct AppSettings: Codable, Equatable {
             showStreamInfoOverlay: false,
             channelProgramOverlayVisibility: .onHover,
             programGenreDisplaySettings: .preset,
-            largeTilePlayback: config.largeTilePlayback ?? config.defaultPlaybackProfile,
-            smallTilePlayback: config.smallTilePlayback ?? config.defaultPlaybackProfile
+            largeTilePlayback: config.largeTilePlayback ?? TilePlaybackProfile.fallback,
+            smallTilePlayback: config.smallTilePlayback ?? TilePlaybackProfile.fallback
         )
     }
 
     func fillingDefaults(from config: AppConfig) -> AppSettings {
-        let defaultPlaybackProfile = config.defaultPlaybackProfile
         return AppSettings(
             epgStationBaseURL: epgStationBaseURL ?? config.epgStationBaseURL,
             volumePercent: VolumeLevel.normalized(volumePercent ?? config.volumePercent),
@@ -211,10 +176,10 @@ struct AppSettings: Codable, Equatable {
             programGenreDisplaySettings: programGenreDisplaySettings ?? .preset,
             largeTilePlayback: largeTilePlayback
                 ?? config.largeTilePlayback
-                ?? defaultPlaybackProfile,
+                ?? TilePlaybackProfile.fallback,
             smallTilePlayback: smallTilePlayback
                 ?? config.smallTilePlayback
-                ?? defaultPlaybackProfile
+                ?? TilePlaybackProfile.fallback
         )
     }
 
@@ -288,11 +253,11 @@ enum VolumeLevel {
     }
 }
 
-struct DualMonoFilterConfig: Codable, Equatable {
+struct StreamFilterConfig: Codable, Equatable {
     var filterPath: String?
     var muxSelectedToStereo: Bool?
 
-    static let `default` = DualMonoFilterConfig(
+    static let `default` = StreamFilterConfig(
         filterPath: nil,
         muxSelectedToStereo: false
     )
@@ -307,11 +272,6 @@ struct DualMonoFilterConfig: Codable, Equatable {
             "muxSelectedToStereo=\(effectiveMuxSelectedToStereo)"
         ].joined(separator: ",")
     }
-}
-
-enum StartupStreamsMode: String, Codable, Hashable {
-    case configured
-    case empty
 }
 
 struct TilePlacement: Codable, Equatable, Hashable {
@@ -739,7 +699,6 @@ struct StreamConfig: Decodable, Identifiable {
     var isUnconvertedPlayback: Bool?
     var title: String?
     var url: String
-    var muted: Bool?
     var audioMode: AudioMode?
     var deinterlace: String?
     var mediaOptions: [String]?

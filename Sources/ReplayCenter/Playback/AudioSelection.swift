@@ -28,7 +28,7 @@ extension AudioSelection {
         switch audioMode {
         case .right:
             self = .secondary
-        case .stereo, .left:
+        case .left:
             self = .primary
         }
     }
