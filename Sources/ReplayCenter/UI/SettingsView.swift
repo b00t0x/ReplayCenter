@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var tileLayoutCategory: TileLayoutCategory
     @State private var keepFocusOnSingleLargeTile: Bool
     @State private var showStreamInfoOverlay: Bool
+    @State private var channelProgramOverlayVisibility: ChannelProgramOverlayVisibility
     @State private var favoriteChannelIDs: [Int]
     @State private var hiddenChannelIDs: [Int]
     @State private var draggingFavoriteChannelID: Int?
@@ -42,6 +43,9 @@ struct SettingsView: View {
         )
         _showStreamInfoOverlay = State(
             initialValue: model.settings.showStreamInfoOverlay ?? true
+        )
+        _channelProgramOverlayVisibility = State(
+            initialValue: model.settings.channelProgramOverlayVisibility ?? .always
         )
         _favoriteChannelIDs = State(initialValue: model.channelSettings.favoriteChannelIDs)
         _hiddenChannelIDs = State(initialValue: model.channelSettings.hiddenChannelIDs)
@@ -178,6 +182,18 @@ struct SettingsView: View {
                 TextField("https://epgstation.example.local/", text: $epgStationBaseURLText)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 520)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("表示")
+                    .font(.headline)
+                Picker("チャンネル/番組情報", selection: $channelProgramOverlayVisibility) {
+                    ForEach(ChannelProgramOverlayVisibility.allCases) { visibility in
+                        Text(visibility.label).tag(visibility)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 260)
             }
         }
     }
@@ -371,6 +387,7 @@ struct SettingsView: View {
             volumePercent: VolumeLevel.normalized(volumePercent),
             keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile,
             showStreamInfoOverlay: showStreamInfoOverlay,
+            channelProgramOverlayVisibility: channelProgramOverlayVisibility,
             largeTilePlayback: largeTilePlayback,
             smallTilePlayback: smallTilePlayback
         )

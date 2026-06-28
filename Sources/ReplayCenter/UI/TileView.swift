@@ -9,6 +9,8 @@ struct TileView: View {
     let showStreamInfo: Bool
     let showFocusRing: Bool
     let topOverlayInset: CGFloat
+    let channelProgramInfo: ChannelProgramOverlayInfo?
+    let channelProgramOverlayVisibility: ChannelProgramOverlayVisibility
     let onFocus: () -> Void
     let onOpenChannelSelector: () -> Void
     let onSetAudioSelection: (AudioSelection) -> Void
@@ -41,14 +43,15 @@ struct TileView: View {
                     }
                 }
                 .overlay(alignment: .topLeading) {
-                    Text(title)
-                        .font(.caption2)
-                        .lineLimit(1)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 3)
-                        .background(.black.opacity(labelBackgroundOpacity))
-                        .foregroundStyle(labelColor)
+                    if showsChannelProgramOverlay {
+                        TileChannelProgramOverlayView(
+                            info: effectiveChannelProgramInfo,
+                            labelColor: labelColor,
+                            backgroundOpacity: labelBackgroundOpacity,
+                            maxWidth: max(proxy.size.width * 0.72, 80)
+                        )
                         .padding(.top, topOverlayInset)
+                    }
                 }
                 .overlay {
                     if let statusText = model.playbackState.displayText {
@@ -135,6 +138,24 @@ struct TileView: View {
         return stream.title ?? stream.url
     }
 
+    private var effectiveChannelProgramInfo: ChannelProgramOverlayInfo {
+        channelProgramInfo ?? ChannelProgramOverlayInfo(
+            channelName: title,
+            programName: nil,
+            programTimeText: nil
+        )
+    }
+
+    private var showsChannelProgramOverlay: Bool {
+        guard model.stream != nil else { return true }
+        switch channelProgramOverlayVisibility {
+        case .always:
+            return true
+        case .onHover:
+            return isHovering
+        }
+    }
+
     private var labelBackgroundOpacity: Double {
         model.stream == nil ? 0.35 : 0.58
     }
@@ -165,6 +186,39 @@ struct TileView: View {
                         onFocus()
                     }
             )
+    }
+}
+
+private struct TileChannelProgramOverlayView: View {
+    let info: ChannelProgramOverlayInfo
+    let labelColor: Color
+    let backgroundOpacity: Double
+    let maxWidth: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(info.channelName)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+            if let programLine {
+                Text(programLine)
+                    .font(.caption2)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: maxWidth, alignment: .leading)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 3)
+        .background(.black.opacity(backgroundOpacity))
+        .foregroundStyle(labelColor)
+    }
+
+    private var programLine: String? {
+        guard let programName = info.programName else { return nil }
+        if let programTimeText = info.programTimeText {
+            return "\(programTimeText) \(programName)"
+        }
+        return programName
     }
 }
 

@@ -304,6 +304,12 @@ final class TileGridModel {
         onSettingsChanged?(settings)
     }
 
+    func setChannelProgramOverlayVisibility(_ visibility: ChannelProgramOverlayVisibility) {
+        guard settings.channelProgramOverlayVisibility != visibility else { return }
+        settings.channelProgramOverlayVisibility = visibility
+        onSettingsChanged?(settings)
+    }
+
     func setKeepFocusOnSingleLargeTile(_ isEnabled: Bool) {
         guard settings.keepFocusOnSingleLargeTile != isEnabled else { return }
         settings.keepFocusOnSingleLargeTile = isEnabled
@@ -325,6 +331,7 @@ final class TileGridModel {
         settings.volumePercent = normalizedVolume
         settings.keepFocusOnSingleLargeTile = settings.keepFocusOnSingleLargeTile ?? true
         settings.showStreamInfoOverlay = settings.showStreamInfoOverlay ?? true
+        settings.channelProgramOverlayVisibility = settings.channelProgramOverlayVisibility ?? .always
         settings.largeTilePlayback = settings.largeTilePlayback
             ?? self.settings.largeTilePlayback
             ?? config.largeTilePlayback
@@ -346,6 +353,15 @@ final class TileGridModel {
         focus(focusedIndex)
         onSettingsChanged?(settings)
         return true
+    }
+
+    func refreshCurrentPrograms() async {
+        await channelCatalog?.refreshCurrentPrograms()
+    }
+
+    func channelProgramOverlayInfo(for tile: TileModel) -> ChannelProgramOverlayInfo? {
+        guard let channelID = tile.stream?.channelID else { return nil }
+        return channelCatalog?.overlayInfo(channelID: channelID)
     }
 
     private func updateEPGStationClientIfNeeded(previousBaseURL: URL?) {

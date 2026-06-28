@@ -79,11 +79,28 @@ struct AppConfig: Decodable {
     }
 }
 
+enum ChannelProgramOverlayVisibility: String, Codable, CaseIterable, Identifiable {
+    case always
+    case onHover
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .always:
+            return "常時表示"
+        case .onHover:
+            return "ホバー時のみ"
+        }
+    }
+}
+
 struct AppSettings: Codable, Equatable {
     var epgStationBaseURL: URL?
     var volumePercent: Int?
     var keepFocusOnSingleLargeTile: Bool?
     var showStreamInfoOverlay: Bool?
+    var channelProgramOverlayVisibility: ChannelProgramOverlayVisibility?
     var largeTilePlayback: TilePlaybackProfile?
     var smallTilePlayback: TilePlaybackProfile?
 
@@ -93,6 +110,7 @@ struct AppSettings: Codable, Equatable {
         case keepFocusOnSingleLargeTile
         case showStreamInfoOverlay
         case showInputClockOverlay
+        case channelProgramOverlayVisibility
         case largeTilePlayback
         case smallTilePlayback
     }
@@ -102,6 +120,7 @@ struct AppSettings: Codable, Equatable {
         volumePercent: Int?,
         keepFocusOnSingleLargeTile: Bool?,
         showStreamInfoOverlay: Bool?,
+        channelProgramOverlayVisibility: ChannelProgramOverlayVisibility?,
         largeTilePlayback: TilePlaybackProfile?,
         smallTilePlayback: TilePlaybackProfile?
     ) {
@@ -109,6 +128,7 @@ struct AppSettings: Codable, Equatable {
         self.volumePercent = volumePercent
         self.keepFocusOnSingleLargeTile = keepFocusOnSingleLargeTile
         self.showStreamInfoOverlay = showStreamInfoOverlay
+        self.channelProgramOverlayVisibility = channelProgramOverlayVisibility
         self.largeTilePlayback = largeTilePlayback
         self.smallTilePlayback = smallTilePlayback
     }
@@ -120,6 +140,10 @@ struct AppSettings: Codable, Equatable {
         keepFocusOnSingleLargeTile = try container.decodeIfPresent(Bool.self, forKey: .keepFocusOnSingleLargeTile)
         showStreamInfoOverlay = try container.decodeIfPresent(Bool.self, forKey: .showStreamInfoOverlay)
             ?? container.decodeIfPresent(Bool.self, forKey: .showInputClockOverlay)
+        channelProgramOverlayVisibility = try container.decodeIfPresent(
+            ChannelProgramOverlayVisibility.self,
+            forKey: .channelProgramOverlayVisibility
+        )
         largeTilePlayback = try container.decodeIfPresent(TilePlaybackProfile.self, forKey: .largeTilePlayback)
         smallTilePlayback = try container.decodeIfPresent(TilePlaybackProfile.self, forKey: .smallTilePlayback)
     }
@@ -130,6 +154,10 @@ struct AppSettings: Codable, Equatable {
         try container.encodeIfPresent(volumePercent, forKey: .volumePercent)
         try container.encodeIfPresent(keepFocusOnSingleLargeTile, forKey: .keepFocusOnSingleLargeTile)
         try container.encodeIfPresent(showStreamInfoOverlay, forKey: .showStreamInfoOverlay)
+        try container.encodeIfPresent(
+            channelProgramOverlayVisibility,
+            forKey: .channelProgramOverlayVisibility
+        )
         try container.encodeIfPresent(largeTilePlayback, forKey: .largeTilePlayback)
         try container.encodeIfPresent(smallTilePlayback, forKey: .smallTilePlayback)
     }
@@ -139,6 +167,7 @@ struct AppSettings: Codable, Equatable {
         volumePercent: nil,
         keepFocusOnSingleLargeTile: nil,
         showStreamInfoOverlay: nil,
+        channelProgramOverlayVisibility: nil,
         largeTilePlayback: nil,
         smallTilePlayback: nil
     )
@@ -149,6 +178,7 @@ struct AppSettings: Codable, Equatable {
             volumePercent: VolumeLevel.normalized(config.volumePercent),
             keepFocusOnSingleLargeTile: config.keepFocusOnSingleLargeTile ?? true,
             showStreamInfoOverlay: true,
+            channelProgramOverlayVisibility: .always,
             largeTilePlayback: config.largeTilePlayback ?? config.defaultPlaybackProfile,
             smallTilePlayback: config.smallTilePlayback ?? config.defaultPlaybackProfile
         )
@@ -163,6 +193,7 @@ struct AppSettings: Codable, Equatable {
                 ?? config.keepFocusOnSingleLargeTile
                 ?? true,
             showStreamInfoOverlay: showStreamInfoOverlay ?? true,
+            channelProgramOverlayVisibility: channelProgramOverlayVisibility ?? .always,
             largeTilePlayback: largeTilePlayback
                 ?? config.largeTilePlayback
                 ?? defaultPlaybackProfile,
@@ -178,6 +209,7 @@ struct AppSettings: Codable, Equatable {
             "volumePercent=\(volumePercent.map(String.init) ?? "<nil>")",
             "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")",
             "showStreamInfoOverlay=\(showStreamInfoOverlay.map(String.init) ?? "<nil>")",
+            "channelProgramOverlayVisibility=\(channelProgramOverlayVisibility?.rawValue ?? "<nil>")",
             "largeTilePlayback=\(largeTilePlayback?.summary ?? "<nil>")",
             "smallTilePlayback=\(smallTilePlayback?.summary ?? "<nil>")"
         ].joined(separator: " ")

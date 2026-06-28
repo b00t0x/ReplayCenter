@@ -9,6 +9,12 @@ struct ChannelSelectionItem: Identifiable, Hashable {
     let currentProgram: ScheduleProgram?
 }
 
+struct ChannelProgramOverlayInfo: Hashable {
+    let channelName: String
+    let programName: String?
+    let programTimeText: String?
+}
+
 enum BroadcastChannelCategory: String, CaseIterable, Identifiable, Hashable {
     case terrestrial
     case bs
@@ -61,12 +67,7 @@ final class ChannelCatalogModel {
         do {
             let channels = try await client.fetchChannels()
             let schedules = try await client.fetchBroadcastingSchedules()
-            var programsByChannelID: [Int: ScheduleProgram] = [:]
-            for schedule in schedules {
-                if let currentProgram = schedule.currentProgram {
-                    programsByChannelID[schedule.channel.id] = currentProgram
-                }
-            }
+            let programsByChannelID = Self.currentProgramsByChannelID(from: schedules)
 
             items = Self.selectionItems(
                 from: channels,
@@ -89,8 +90,45 @@ final class ChannelCatalogModel {
         }
     }
 
+    func refreshCurrentPrograms() async {
+        guard hasLoaded else {
+            await reload()
+            return
+        }
+        guard !items.isEmpty else { return }
+
+        do {
+            let schedules = try await client.fetchBroadcastingSchedules()
+            let programsByChannelID = Self.currentProgramsByChannelID(from: schedules)
+            items = items.map { item in
+                ChannelSelectionItem(
+                    channel: item.channel,
+                    displayName: item.displayName,
+                    category: item.category,
+                    currentProgram: programsByChannelID[item.id]
+                )
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func playbackModeOptions(for container: LiveStreamContainer) -> [EPGStationLiveStreamModeOption] {
         playbackModeOptionsByContainer[container] ?? []
+    }
+
+    func item(channelID: Int) -> ChannelSelectionItem? {
+        items.first { $0.id == channelID }
+    }
+
+    func overlayInfo(channelID: Int) -> ChannelProgramOverlayInfo? {
+        guard let item = item(channelID: channelID) else { return nil }
+        return ChannelProgramOverlayInfo(
+            channelName: item.displayName,
+            programName: item.currentProgram?.name,
+            programTimeText: item.currentProgram?.timeRangeText
+        )
     }
 
     private static func selectionItems(
@@ -118,6 +156,18 @@ final class ChannelCatalogModel {
         }
     }
 
+    private static func currentProgramsByChannelID(
+        from schedules: [BroadcastingSchedule]
+    ) -> [Int: ScheduleProgram] {
+        var programsByChannelID: [Int: ScheduleProgram] = [:]
+        for schedule in schedules {
+            if let currentProgram = schedule.currentProgram {
+                programsByChannelID[schedule.channel.id] = currentProgram
+            }
+        }
+        return programsByChannelID
+    }
+
     private static func category(for channel: EPGStationChannel) -> BroadcastChannelCategory? {
         switch channel.networkId {
         case 11:
@@ -138,5 +188,17 @@ final class ChannelCatalogModel {
             return halfWidthName
         }
         return String(channel.id)
+    }
+}
+
+private extension ScheduleProgram {
+    var timeRangeText: String {
+        "\(startAt.tileOverlayTimeText)-\(endAt.tileOverlayTimeText)"
+    }
+}
+
+private extension Date {
+    var tileOverlayTimeText: String {
+        formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
     }
 }

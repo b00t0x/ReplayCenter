@@ -58,6 +58,7 @@ struct ContentView: View {
         .task {
             await model.channelCatalog?.loadIfNeeded()
             updatePlaybackModeOptionsFromCatalog()
+            await refreshCurrentProgramsPeriodically()
         }
         .onAppear {
             model.focusInitialTileIfNeeded()
@@ -83,7 +84,9 @@ struct ContentView: View {
                             volumePercent: model.volumePercent,
                             showStreamInfo: model.settings.showStreamInfoOverlay ?? true,
                             showFocusRing: isWindowHovering,
-                            topOverlayInset: placement.y == 0 ? titlebarOverlayInset : 0
+                            topOverlayInset: placement.y == 0 ? titlebarOverlayInset : 0,
+                            channelProgramInfo: model.channelProgramOverlayInfo(for: tile),
+                            channelProgramOverlayVisibility: model.settings.channelProgramOverlayVisibility ?? .always
                         ) {
                             model.focus(index)
                         } onOpenChannelSelector: {
@@ -296,5 +299,16 @@ struct ContentView: View {
     private func updatePlaybackModeOptionsFromCatalog() {
         guard let channelCatalog = model.channelCatalog else { return }
         model.setPlaybackModeOptions(channelCatalog.playbackModeOptions(for: model.liveStreamContainer))
+    }
+
+    private func refreshCurrentProgramsPeriodically() async {
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(for: .seconds(10))
+            } catch {
+                return
+            }
+            await model.refreshCurrentPrograms()
+        }
     }
 }
