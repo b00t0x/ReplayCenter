@@ -7,11 +7,54 @@ private struct FixedWindowScale {
     let value: CGFloat
 }
 
+private final class HoverTrackingHostingView<Content: View>: NSHostingView<Content> {
+    private var onHoverChanged: (Bool) -> Void = { _ in }
+    private var hoverTrackingArea: NSTrackingArea?
+
+    required init(rootView: Content) {
+        super.init(rootView: rootView)
+    }
+
+    init(rootView: Content, onHoverChanged: @escaping (Bool) -> Void) {
+        self.onHoverChanged = onHoverChanged
+        super.init(rootView: rootView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChanged(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverChanged(false)
+    }
+}
+
 @MainActor
 final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
     private static let settingsMinimumContentSize = CGSize(width: 1040, height: 640)
     private static let channelSelectorMinimumContentSize = CGSize(width: 560, height: 600)
     private static let tileBasePixelSize = CGSize(width: 1920, height: 1080)
+    private static let titlebarOverlayInset: CGFloat = 30
     private static let fixedWindowScales = [
         FixedWindowScale(percent: 50, value: 0.5),
         FixedWindowScale(percent: 66, value: 2.0 / 3.0),
@@ -75,6 +118,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         self.tileGrid = tileGrid
         let view = ContentView(
             model: tileGrid,
+            titlebarOverlayInset: Self.titlebarOverlayInset,
             onChannelSelectorPresentationChanged: { [weak self] isPresented in
                 self?.applyOverlayWindowMode(
                     isPresented: isPresented,
@@ -92,6 +136,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         window.title = config.windowTitle ?? "ReplayCenter"
         window.delegate = self
         window.isReleasedWhenClosed = false
+        configureTitlebar(for: window)
         applyWindowLayout(tileGrid.layout, to: window, resize: false)
         tileGrid.onLayoutChanged = { [weak self] layout in
             if self?.tileGrid?.isSettingsPresented != true {
@@ -108,7 +153,9 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
                 minimumContentSize: Self.settingsMinimumContentSize
             )
         }
-        window.contentView = NSHostingView(rootView: view)
+        window.contentView = HoverTrackingHostingView(rootView: view) { [weak self, weak window] isHovering in
+            self?.setTitlebarControlsVisible(isHovering, in: window)
+        }
         window.makeKeyAndOrderFront(nil)
         self.window = window
     }
@@ -165,6 +212,26 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         if let activity {
             ProcessInfo.processInfo.endActivity(activity)
             self.activity = nil
+        }
+    }
+
+    private func configureTitlebar(for window: NSWindow) {
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.styleMask.insert(.fullSizeContentView)
+        setTitlebarControlsVisible(false, in: window)
+    }
+
+    private func setTitlebarControlsVisible(_ isVisible: Bool, in window: NSWindow?) {
+        guard let window else { return }
+        for buttonType in [
+            NSWindow.ButtonType.closeButton,
+            .miniaturizeButton,
+            .zoomButton
+        ] {
+            if let button = window.standardWindowButton(buttonType) {
+                button.isHidden = !isVisible
+            }
         }
     }
 

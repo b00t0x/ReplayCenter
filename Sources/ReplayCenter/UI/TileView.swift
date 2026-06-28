@@ -8,6 +8,7 @@ struct TileView: View {
     let volumePercent: Int
     let showStreamInfo: Bool
     let showFocusRing: Bool
+    let topOverlayInset: CGFloat
     let onFocus: () -> Void
     let onOpenChannelSelector: () -> Void
     let onSetAudioSelection: (AudioSelection) -> Void
@@ -47,6 +48,7 @@ struct TileView: View {
                         .padding(.vertical, 3)
                         .background(.black.opacity(labelBackgroundOpacity))
                         .foregroundStyle(labelColor)
+                        .padding(.top, topOverlayInset)
                 }
                 .overlay {
                     if let statusText = model.playbackState.displayText {
@@ -69,6 +71,7 @@ struct TileView: View {
                             .background(.black.opacity(0.72))
                             .foregroundStyle(.white)
                             .padding(6)
+                            .padding(.top, topOverlayInset)
                     }
                 }
                 .overlay {
