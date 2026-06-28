@@ -15,6 +15,11 @@ struct SettingsView: View {
     @State private var keepFocusOnSingleLargeTile: Bool
     @State private var showStreamInfoOverlay: Bool
     @State private var showChannelProgramOverlayAlways: Bool
+    @State private var highlightedProgramGenres: [ProgramGenreCode]
+    @State private var dimmedProgramGenres: [ProgramGenreCode]
+    @State private var draggingProgramGenre: ProgramGenreDragItem?
+    @State private var isProgramGenrePickerPresented = false
+    @State private var programGenrePickerTarget: ProgramGenreDisplayKind = .highlighted
     @State private var favoriteChannelIDs: [Int]
     @State private var hiddenChannelIDs: [Int]
     @State private var draggingFavoriteChannelID: Int?
@@ -47,6 +52,9 @@ struct SettingsView: View {
         _showChannelProgramOverlayAlways = State(
             initialValue: (model.settings.channelProgramOverlayVisibility ?? .always) == .always
         )
+        let programGenreDisplaySettings = model.settings.programGenreDisplaySettings ?? .preset
+        _highlightedProgramGenres = State(initialValue: programGenreDisplaySettings.highlightedGenres)
+        _dimmedProgramGenres = State(initialValue: programGenreDisplaySettings.dimmedGenres)
         _favoriteChannelIDs = State(initialValue: model.channelSettings.favoriteChannelIDs)
         _hiddenChannelIDs = State(initialValue: model.channelSettings.hiddenChannelIDs)
     }
@@ -165,6 +173,8 @@ struct SettingsView: View {
             generalSection
         case .playback:
             playbackSection
+        case .genreDisplay:
+            programDisplaySection
         case .tiles:
             tilesSection
         case .channels:
@@ -242,6 +252,75 @@ struct SettingsView: View {
         }
     }
 
+    private var programDisplaySection: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            sectionTitle("ジャンル表示")
+
+            HStack(alignment: .top, spacing: 18) {
+                ProgramGenreSelectionList(
+                    title: "強調表示",
+                    emptyMessage: "強調表示するジャンルはありません",
+                    kind: .highlighted,
+                    codes: highlightedProgramGenres,
+                    draggingProgramGenre: $draggingProgramGenre
+                ) {
+                    showProgramGenrePicker(for: .highlighted)
+                } onRemove: { code in
+                    removeProgramGenre(code, from: .highlighted)
+                } onMoveUp: { code in
+                    moveProgramGenre(code, in: .highlighted, by: -1)
+                } onMoveDown: { code in
+                    moveProgramGenre(code, in: .highlighted, by: 1)
+                } onDrop: { source, target in
+                    moveProgramGenre(source, toDropTarget: target, in: .highlighted)
+                }
+
+                ProgramGenreSelectionList(
+                    title: "弱表示",
+                    emptyMessage: "弱表示するジャンルはありません",
+                    kind: .dimmed,
+                    codes: dimmedProgramGenres,
+                    draggingProgramGenre: $draggingProgramGenre
+                ) {
+                    showProgramGenrePicker(for: .dimmed)
+                } onRemove: { code in
+                    removeProgramGenre(code, from: .dimmed)
+                } onMoveUp: { code in
+                    moveProgramGenre(code, in: .dimmed, by: -1)
+                } onMoveDown: { code in
+                    moveProgramGenre(code, in: .dimmed, by: 1)
+                } onDrop: { source, target in
+                    moveProgramGenre(source, toDropTarget: target, in: .dimmed)
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button("初期値に戻す") {
+                    highlightedProgramGenres = ProgramGenreDisplaySettings.preset.highlightedGenres
+                    dimmedProgramGenres = ProgramGenreDisplaySettings.preset.dimmedGenres
+                }
+                .buttonStyle(.bordered)
+
+                Text("空にすると、その表示は無効になります。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if isProgramGenrePickerPresented {
+                ProgramGenrePickerPanel(
+                    target: programGenrePickerTarget,
+                    highlightedGenres: highlightedProgramGenres,
+                    dimmedGenres: dimmedProgramGenres
+                ) { code in
+                    addProgramGenre(code, to: programGenrePickerTarget)
+                } onClose: {
+                    isProgramGenrePickerPresented = false
+                }
+                .frame(maxWidth: 720)
+            }
+        }
+    }
+
     private var tilesSection: some View {
         VStack(alignment: .leading, spacing: 18) {
             sectionTitle("タイル")
@@ -283,7 +362,7 @@ struct SettingsView: View {
 
     private var channelsSection: some View {
         VStack(alignment: .leading, spacing: 18) {
-            sectionTitle("チャンネル")
+            sectionTitle("チャンネル管理")
 
             if let channelCatalog = model.channelCatalog {
                 if channelCatalog.isLoading {
@@ -386,7 +465,10 @@ struct SettingsView: View {
             keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile,
             showStreamInfoOverlay: showStreamInfoOverlay,
             channelProgramOverlayVisibility: showChannelProgramOverlayAlways ? .always : .onHover,
-            programGenreDisplaySettings: model.settings.programGenreDisplaySettings ?? .preset,
+            programGenreDisplaySettings: ProgramGenreDisplaySettings(
+                highlightedGenres: highlightedProgramGenres,
+                dimmedGenres: dimmedProgramGenres
+            ),
             largeTilePlayback: largeTilePlayback,
             smallTilePlayback: smallTilePlayback
         )
@@ -459,6 +541,60 @@ struct SettingsView: View {
         hiddenChannelIDs = settings.hiddenChannelIDs
     }
 
+    private func showProgramGenrePicker(for target: ProgramGenreDisplayKind) {
+        programGenrePickerTarget = target
+        isProgramGenrePickerPresented = true
+    }
+
+    private func addProgramGenre(_ code: ProgramGenreCode, to target: ProgramGenreDisplayKind) {
+        removeProgramGenre(code, from: target.opposite)
+        switch target {
+        case .highlighted:
+            if !highlightedProgramGenres.contains(code) {
+                highlightedProgramGenres.append(code)
+            }
+        case .dimmed:
+            if !dimmedProgramGenres.contains(code) {
+                dimmedProgramGenres.append(code)
+            }
+        }
+    }
+
+    private func removeProgramGenre(_ code: ProgramGenreCode, from target: ProgramGenreDisplayKind) {
+        switch target {
+        case .highlighted:
+            highlightedProgramGenres.removeAll { $0 == code }
+        case .dimmed:
+            dimmedProgramGenres.removeAll { $0 == code }
+        }
+    }
+
+    private func moveProgramGenre(
+        _ code: ProgramGenreCode,
+        in target: ProgramGenreDisplayKind,
+        by offset: Int
+    ) {
+        switch target {
+        case .highlighted:
+            highlightedProgramGenres.moveElement(code, by: offset)
+        case .dimmed:
+            dimmedProgramGenres.moveElement(code, by: offset)
+        }
+    }
+
+    private func moveProgramGenre(
+        _ source: ProgramGenreCode,
+        toDropTarget targetCode: ProgramGenreCode,
+        in target: ProgramGenreDisplayKind
+    ) {
+        switch target {
+        case .highlighted:
+            highlightedProgramGenres.moveElement(source, toDropTarget: targetCode)
+        case .dimmed:
+            dimmedProgramGenres.moveElement(source, toDropTarget: targetCode)
+        }
+    }
+
     private func canMoveFavorite(_ channelID: Int, by offset: Int) -> Bool {
         let ids = draftChannelSettings.favoriteChannelIDs
         guard let currentIndex = ids.firstIndex(of: channelID) else { return false }
@@ -490,6 +626,7 @@ private struct ChannelSettingsRowModel: Identifiable, Hashable {
     let channelID: Int
     let title: String
     let detail: String?
+    let logoURL: URL?
     let isMissing: Bool
 
     var id: Int { channelID }
@@ -498,6 +635,7 @@ private struct ChannelSettingsRowModel: Identifiable, Hashable {
         self.channelID = item.id
         self.title = item.displayName
         self.detail = item.category.label
+        self.logoURL = item.logoURL
         self.isMissing = false
     }
 
@@ -505,7 +643,444 @@ private struct ChannelSettingsRowModel: Identifiable, Hashable {
         self.channelID = channelID
         self.title = "不明なチャンネル"
         self.detail = "チャンネル情報を取得できません (ID: \(channelID))"
+        self.logoURL = nil
         self.isMissing = true
+    }
+}
+
+private enum ProgramGenreDisplayKind: String, CaseIterable, Identifiable {
+    case highlighted
+    case dimmed
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .highlighted:
+            return "強調表示"
+        case .dimmed:
+            return "弱表示"
+        }
+    }
+
+    var addTitle: String {
+        switch self {
+        case .highlighted:
+            return "強調表示するジャンルを追加"
+        case .dimmed:
+            return "表示を弱めるジャンルを追加"
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .highlighted:
+            return "強調"
+        case .dimmed:
+            return "弱表示"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .highlighted:
+            return "sparkles"
+        case .dimmed:
+            return "eye.slash"
+        }
+    }
+
+    var accentColor: Color {
+        switch self {
+        case .highlighted:
+            return .green
+        case .dimmed:
+            return .secondary
+        }
+    }
+
+    var opposite: ProgramGenreDisplayKind {
+        switch self {
+        case .highlighted:
+            return .dimmed
+        case .dimmed:
+            return .highlighted
+        }
+    }
+}
+
+private struct ProgramGenreDragItem: Equatable {
+    let code: ProgramGenreCode
+    let kind: ProgramGenreDisplayKind
+}
+
+private struct ProgramGenreSelectionList: View {
+    let title: String
+    let emptyMessage: String
+    let kind: ProgramGenreDisplayKind
+    let codes: [ProgramGenreCode]
+    @Binding var draggingProgramGenre: ProgramGenreDragItem?
+    let onAdd: () -> Void
+    let onRemove: (ProgramGenreCode) -> Void
+    let onMoveUp: (ProgramGenreCode) -> Void
+    let onMoveDown: (ProgramGenreCode) -> Void
+    let onDrop: (ProgramGenreCode, ProgramGenreCode) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label(title, systemImage: kind.systemImage)
+                    .font(.headline)
+                Spacer()
+                Button {
+                    onAdd()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                .help("\(title)するジャンルを追加")
+            }
+
+            VStack(spacing: 0) {
+                if codes.isEmpty {
+                    Text(emptyMessage)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                } else {
+                    ForEach(Array(codes.enumerated()), id: \.element.id) { index, code in
+                        ProgramGenreSelectionRow(
+                            code: code,
+                            kind: kind,
+                            canMoveUp: index > 0,
+                            canMoveDown: index < codes.count - 1
+                        ) {
+                            onRemove(code)
+                        } onMoveUp: {
+                            onMoveUp(code)
+                        } onMoveDown: {
+                            onMoveDown(code)
+                        }
+                        .onDrag {
+                            draggingProgramGenre = ProgramGenreDragItem(code: code, kind: kind)
+                            return NSItemProvider(object: code.id as NSString)
+                        }
+                        .onDrop(
+                            of: [UTType.text],
+                            delegate: ProgramGenreDropDelegate(
+                                targetCode: code,
+                                targetKind: kind,
+                                draggingProgramGenre: $draggingProgramGenre,
+                                onDrop: onDrop
+                            )
+                        )
+
+                        if index < codes.count - 1 {
+                            Divider()
+                        }
+                    }
+                }
+            }
+            .background(Color.white.opacity(0.06))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .frame(maxWidth: 320, alignment: .topLeading)
+    }
+}
+
+private struct ProgramGenreSelectionRow: View {
+    let code: ProgramGenreCode
+    let kind: ProgramGenreDisplayKind
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onRemove: () -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: kind.systemImage)
+                .foregroundStyle(kind.accentColor)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(option.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                if let detail = option.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                onMoveUp()
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.plain)
+            .disabled(!canMoveUp)
+            .help("上へ移動")
+
+            Button {
+                onMoveDown()
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.plain)
+            .disabled(!canMoveDown)
+            .help("下へ移動")
+
+            Button {
+                onRemove()
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.plain)
+            .help("削除")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    private var option: ProgramGenreOption {
+        ProgramGenreCatalog.option(for: code)
+    }
+}
+
+private struct ProgramGenrePickerPanel: View {
+    let target: ProgramGenreDisplayKind
+    let highlightedGenres: [ProgramGenreCode]
+    let dimmedGenres: [ProgramGenreCode]
+    let onAdd: (ProgramGenreCode) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(target.addTitle)
+                    .font(.headline)
+                Spacer()
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+                .help("閉じる")
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(ProgramGenreCatalog.genreOptions.enumerated()), id: \.element.id) { index, option in
+                    ProgramGenrePickerGenreSection(
+                        majorOption: option,
+                        subGenreOptions: ProgramGenreCatalog.subGenreOptions(for: option.code.genre),
+                        target: target,
+                        selectionState: selectionState,
+                        onAdd: onAdd
+                    )
+
+                    if index < ProgramGenreCatalog.genreOptions.count - 1 {
+                        Divider()
+                    }
+                }
+            }
+            .background(Color.white.opacity(0.06))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .padding(14)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func selectionState(for code: ProgramGenreCode) -> ProgramGenreSelectionState {
+        if highlightedGenres.contains(code) {
+            return .highlighted
+        }
+        if dimmedGenres.contains(code) {
+            return .dimmed
+        }
+        return .none
+    }
+}
+
+private struct ProgramGenrePickerGenreSection: View {
+    let majorOption: ProgramGenreOption
+    let subGenreOptions: [ProgramGenreOption]
+    let target: ProgramGenreDisplayKind
+    let selectionState: (ProgramGenreCode) -> ProgramGenreSelectionState
+    let onAdd: (ProgramGenreCode) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ProgramGenrePickerRow(
+                option: majorOption,
+                selectionState: selectionState(majorOption.code),
+                target: target,
+                indent: 0,
+                showsDetail: false
+            ) {
+                onAdd(majorOption.code)
+            }
+
+            ForEach(subGenreOptions) { option in
+                ProgramGenrePickerRow(
+                    option: option,
+                    selectionState: selectionState(option.code),
+                    target: target,
+                    indent: 18,
+                    showsDetail: false
+                ) {
+                    onAdd(option.code)
+                }
+            }
+        }
+    }
+}
+
+private struct ProgramGenrePickerRow: View {
+    let option: ProgramGenreOption
+    let selectionState: ProgramGenreSelectionState
+    let target: ProgramGenreDisplayKind
+    let indent: CGFloat
+    let showsDetail: Bool
+    let onAdd: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if indent > 0 {
+                Spacer()
+                    .frame(width: indent)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(option.title)
+                    .font(indent == 0 ? .headline : .callout)
+                    .lineLimit(1)
+                if showsDetail, let detail = option.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            if let label = selectionState.label {
+                Text(label)
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(selectionState.backgroundColor)
+                    .foregroundStyle(selectionState.foregroundColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+
+            Button {
+                onAdd()
+            } label: {
+                Image(systemName: selectionState == target.state ? "checkmark" : "plus")
+            }
+            .buttonStyle(.plain)
+            .disabled(selectionState == target.state)
+            .help(selectionState == target.state ? "追加済み" : "\(target.label)に追加")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, showsDetail ? 8 : 6)
+        .contentShape(Rectangle())
+    }
+}
+
+private enum ProgramGenreSelectionState: Equatable {
+    case none
+    case highlighted
+    case dimmed
+
+    var label: String? {
+        switch self {
+        case .none:
+            return nil
+        case .highlighted:
+            return "強調"
+        case .dimmed:
+            return "弱表示"
+        }
+    }
+
+    var backgroundColor: Color {
+        switch self {
+        case .none:
+            return .clear
+        case .highlighted:
+            return Color.green.opacity(0.72)
+        case .dimmed:
+            return Color.secondary.opacity(0.16)
+        }
+    }
+
+    var foregroundColor: Color {
+        switch self {
+        case .none:
+            return .clear
+        case .highlighted:
+            return .white
+        case .dimmed:
+            return .secondary
+        }
+    }
+}
+
+private extension ProgramGenreDisplayKind {
+    var state: ProgramGenreSelectionState {
+        switch self {
+        case .highlighted:
+            return .highlighted
+        case .dimmed:
+            return .dimmed
+        }
+    }
+}
+
+private struct ProgramGenreDropDelegate: DropDelegate {
+    let targetCode: ProgramGenreCode
+    let targetKind: ProgramGenreDisplayKind
+    @Binding var draggingProgramGenre: ProgramGenreDragItem?
+    let onDrop: (ProgramGenreCode, ProgramGenreCode) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingProgramGenre,
+              draggingProgramGenre.kind == targetKind,
+              draggingProgramGenre.code != targetCode
+        else { return }
+        onDrop(draggingProgramGenre.code, targetCode)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingProgramGenre = nil
+        return true
     }
 }
 
@@ -578,6 +1153,19 @@ private struct ChannelSettingsRow: View {
                     .foregroundStyle(isFavorite ? .yellow : .secondary)
             }
             .buttonStyle(.plain)
+            .help(isFavorite ? "お気に入りから外す" : "お気に入りに追加")
+
+            Button {
+                onToggleHidden()
+            } label: {
+                Image(systemName: isHidden ? "eye.slash.fill" : "eye")
+                    .foregroundStyle(isHidden ? .secondary : .primary)
+            }
+            .buttonStyle(.plain)
+            .help(isHidden ? "選局画面に表示する" : "選局画面で非表示にする")
+
+            SettingsChannelLogoView(url: row.logoURL, isMissing: row.isMissing)
+                .opacity(isHidden ? 0.55 : 1)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -603,15 +1191,6 @@ private struct ChannelSettingsRow: View {
             Spacer()
 
             Button {
-                onToggleHidden()
-            } label: {
-                Image(systemName: isHidden ? "eye.slash.fill" : "eye")
-                    .foregroundStyle(isHidden ? .secondary : .primary)
-            }
-            .buttonStyle(.plain)
-            .help(isHidden ? "選局画面に表示する" : "選局画面で非表示にする")
-
-            Button {
                 onMoveUp()
             } label: {
                 Image(systemName: "chevron.up")
@@ -629,6 +1208,49 @@ private struct ChannelSettingsRow: View {
         }
         .padding(.vertical, 8)
         .contentShape(Rectangle())
+    }
+}
+
+private struct SettingsChannelLogoView: View {
+    let url: URL?
+    let isMissing: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color(nsColor: .controlBackgroundColor))
+            if isMissing {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else if let url {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case let .success(image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .padding(4)
+                    case .failure:
+                        placeholder
+                    case .empty:
+                        ProgressView()
+                            .controlSize(.small)
+                    @unknown default:
+                        placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: 48, height: 32)
+    }
+
+    private var placeholder: some View {
+        Image(systemName: "tv")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
     }
 }
 
@@ -803,6 +1425,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     case playback
     case tiles
     case channels
+    case genreDisplay
 
     var id: String { rawValue }
 
@@ -815,7 +1438,9 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .tiles:
             return "タイル"
         case .channels:
-            return "チャンネル"
+            return "チャンネル管理"
+        case .genreDisplay:
+            return "ジャンル表示"
         }
     }
 
@@ -829,6 +1454,28 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
             return "rectangle.grid.3x2"
         case .channels:
             return "list.bullet"
+        case .genreDisplay:
+            return "tag"
         }
+    }
+}
+
+private extension Array where Element: Equatable {
+    mutating func moveElement(_ element: Element, by offset: Int) {
+        guard let currentIndex = firstIndex(of: element) else { return }
+        let targetIndex = currentIndex + offset
+        guard indices.contains(targetIndex) else { return }
+        remove(at: currentIndex)
+        insert(element, at: targetIndex)
+    }
+
+    mutating func moveElement(_ source: Element, toDropTarget target: Element) {
+        guard source != target,
+              let sourceIndex = firstIndex(of: source),
+              let targetIndex = firstIndex(of: target)
+        else { return }
+        remove(at: sourceIndex)
+        let adjustedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
+        insert(source, at: adjustedTargetIndex)
     }
 }

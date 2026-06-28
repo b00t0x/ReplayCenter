@@ -45,6 +45,14 @@ struct ProgramGenreDisplaySettings: Codable, Equatable, Hashable {
     }
 }
 
+struct ProgramGenreOption: Identifiable, Hashable {
+    let code: ProgramGenreCode
+    let title: String
+    let detail: String?
+
+    var id: String { code.id }
+}
+
 enum ChannelProgramStyle: Hashable {
     case normal
     case highlighted(ProgramGenreCode)
@@ -246,5 +254,36 @@ enum ProgramGenreCatalog {
         subGenreName(for: code)
             ?? genreName(for: code.genre)
             ?? code.id
+    }
+
+    static var genreOptions: [ProgramGenreOption] {
+        genreNames.keys.sorted().filter { genre in
+            genreNames[genre] != "予備"
+        }.map { genre in
+            ProgramGenreOption(
+                code: ProgramGenreCode(genre: genre, subGenre: nil),
+                title: genreNames[genre] ?? "\(genre)",
+                detail: "大ジャンル"
+            )
+        }
+    }
+
+    static func subGenreOptions(for genre: Int) -> [ProgramGenreOption] {
+        subGenreNames[genre, default: [:]].keys.sorted().map { subGenre in
+            let code = ProgramGenreCode(genre: genre, subGenre: subGenre)
+            return ProgramGenreOption(
+                code: code,
+                title: displayName(for: code),
+                detail: genreName(for: genre)
+            )
+        }
+    }
+
+    static func option(for code: ProgramGenreCode) -> ProgramGenreOption {
+        ProgramGenreOption(
+            code: code,
+            title: displayName(for: code),
+            detail: code.subGenre == nil ? "大ジャンル" : genreName(for: code.genre)
+        )
     }
 }
