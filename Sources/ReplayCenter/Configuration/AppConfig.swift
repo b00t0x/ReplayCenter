@@ -101,6 +101,7 @@ struct AppSettings: Codable, Equatable {
     var keepFocusOnSingleLargeTile: Bool?
     var showStreamInfoOverlay: Bool?
     var channelProgramOverlayVisibility: ChannelProgramOverlayVisibility?
+    var programGenreDisplaySettings: ProgramGenreDisplaySettings?
     var largeTilePlayback: TilePlaybackProfile?
     var smallTilePlayback: TilePlaybackProfile?
 
@@ -111,6 +112,7 @@ struct AppSettings: Codable, Equatable {
         case showStreamInfoOverlay
         case showInputClockOverlay
         case channelProgramOverlayVisibility
+        case programGenreDisplaySettings
         case largeTilePlayback
         case smallTilePlayback
     }
@@ -121,6 +123,7 @@ struct AppSettings: Codable, Equatable {
         keepFocusOnSingleLargeTile: Bool?,
         showStreamInfoOverlay: Bool?,
         channelProgramOverlayVisibility: ChannelProgramOverlayVisibility?,
+        programGenreDisplaySettings: ProgramGenreDisplaySettings?,
         largeTilePlayback: TilePlaybackProfile?,
         smallTilePlayback: TilePlaybackProfile?
     ) {
@@ -129,6 +132,7 @@ struct AppSettings: Codable, Equatable {
         self.keepFocusOnSingleLargeTile = keepFocusOnSingleLargeTile
         self.showStreamInfoOverlay = showStreamInfoOverlay
         self.channelProgramOverlayVisibility = channelProgramOverlayVisibility
+        self.programGenreDisplaySettings = programGenreDisplaySettings
         self.largeTilePlayback = largeTilePlayback
         self.smallTilePlayback = smallTilePlayback
     }
@@ -144,6 +148,10 @@ struct AppSettings: Codable, Equatable {
             ChannelProgramOverlayVisibility.self,
             forKey: .channelProgramOverlayVisibility
         )
+        programGenreDisplaySettings = try container.decodeIfPresent(
+            ProgramGenreDisplaySettings.self,
+            forKey: .programGenreDisplaySettings
+        )
         largeTilePlayback = try container.decodeIfPresent(TilePlaybackProfile.self, forKey: .largeTilePlayback)
         smallTilePlayback = try container.decodeIfPresent(TilePlaybackProfile.self, forKey: .smallTilePlayback)
     }
@@ -158,6 +166,10 @@ struct AppSettings: Codable, Equatable {
             channelProgramOverlayVisibility,
             forKey: .channelProgramOverlayVisibility
         )
+        try container.encodeIfPresent(
+            programGenreDisplaySettings,
+            forKey: .programGenreDisplaySettings
+        )
         try container.encodeIfPresent(largeTilePlayback, forKey: .largeTilePlayback)
         try container.encodeIfPresent(smallTilePlayback, forKey: .smallTilePlayback)
     }
@@ -168,6 +180,7 @@ struct AppSettings: Codable, Equatable {
         keepFocusOnSingleLargeTile: nil,
         showStreamInfoOverlay: nil,
         channelProgramOverlayVisibility: nil,
+        programGenreDisplaySettings: nil,
         largeTilePlayback: nil,
         smallTilePlayback: nil
     )
@@ -179,6 +192,7 @@ struct AppSettings: Codable, Equatable {
             keepFocusOnSingleLargeTile: config.keepFocusOnSingleLargeTile ?? true,
             showStreamInfoOverlay: true,
             channelProgramOverlayVisibility: .always,
+            programGenreDisplaySettings: .preset,
             largeTilePlayback: config.largeTilePlayback ?? config.defaultPlaybackProfile,
             smallTilePlayback: config.smallTilePlayback ?? config.defaultPlaybackProfile
         )
@@ -194,6 +208,7 @@ struct AppSettings: Codable, Equatable {
                 ?? true,
             showStreamInfoOverlay: showStreamInfoOverlay ?? true,
             channelProgramOverlayVisibility: channelProgramOverlayVisibility ?? .always,
+            programGenreDisplaySettings: programGenreDisplaySettings ?? .preset,
             largeTilePlayback: largeTilePlayback
                 ?? config.largeTilePlayback
                 ?? defaultPlaybackProfile,
@@ -210,6 +225,7 @@ struct AppSettings: Codable, Equatable {
             "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")",
             "showStreamInfoOverlay=\(showStreamInfoOverlay.map(String.init) ?? "<nil>")",
             "channelProgramOverlayVisibility=\(channelProgramOverlayVisibility?.rawValue ?? "<nil>")",
+            "programGenreDisplaySettings=\(programGenreDisplaySettings?.summary ?? "<nil>")",
             "largeTilePlayback=\(largeTilePlayback?.summary ?? "<nil>")",
             "smallTilePlayback=\(smallTilePlayback?.summary ?? "<nil>")"
         ].joined(separator: " ")

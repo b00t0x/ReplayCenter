@@ -4,6 +4,7 @@ import SwiftUI
 struct ChannelSelectorView: View {
     @Bindable var catalog: ChannelCatalogModel
     let channelSettings: ChannelSettings
+    let programGenreDisplaySettings: ProgramGenreDisplaySettings
     let onSelect: (ChannelSelectionItem) -> Void
     let onCancel: () -> Void
     @State private var searchText = ""
@@ -120,7 +121,8 @@ struct ChannelSelectorView: View {
                             } label: {
                                 ChannelSelectionRow(
                                     item: item,
-                                    selected: selectedItemID == item.id
+                                    selected: selectedItemID == item.id,
+                                    programGenreDisplaySettings: programGenreDisplaySettings
                                 )
                             }
                             .buttonStyle(.plain)
@@ -260,6 +262,7 @@ private enum ChannelSelectorTab: String, CaseIterable, Identifiable {
 private struct ChannelSelectionRow: View {
     let item: ChannelSelectionItem
     let selected: Bool
+    let programGenreDisplaySettings: ProgramGenreDisplaySettings
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -273,7 +276,7 @@ private struct ChannelSelectionRow: View {
                         .lineLimit(1)
                         .opacity(contentOpacity)
 
-                    if programStyle != .normal {
+                    if programStyle.genreCode != nil {
                         ChannelProgramStyleBadge(style: programStyle)
                     }
                 }
@@ -297,7 +300,7 @@ private struct ChannelSelectionRow: View {
         .padding(.vertical, 8)
         .background(rowBackground)
         .overlay(alignment: .leading) {
-            if programStyle == .baseball {
+            if programStyle.isHighlighted {
                 Rectangle()
                     .fill(Color.green.opacity(selected ? 0.72 : 0.5))
                     .frame(width: 3)
@@ -307,18 +310,19 @@ private struct ChannelSelectionRow: View {
     }
 
     private var programStyle: ChannelProgramStyle {
-        item.currentProgram?.channelSelectorStyle ?? .normal
+        guard let currentProgram = item.currentProgram else { return .normal }
+        return programGenreDisplaySettings.style(for: currentProgram)
     }
 
     private var titleFont: Font {
-        programStyle == .baseball ? .headline.weight(.bold) : .headline
+        programStyle.isHighlighted ? .headline.weight(.bold) : .headline
     }
 
     private var programTextStyle: HierarchicalShapeStyle {
         switch programStyle {
-        case .baseball:
+        case .highlighted:
             return .primary
-        case .shopping:
+        case .dimmed:
             return .tertiary
         case .normal:
             return .secondary
@@ -326,14 +330,14 @@ private struct ChannelSelectionRow: View {
     }
 
     private var contentOpacity: Double {
-        programStyle == .shopping && !selected ? 0.48 : 1
+        programStyle.isDimmed && !selected ? 0.48 : 1
     }
 
     private var rowBackground: Color {
         if selected {
-            return Color.accentColor.opacity(programStyle == .baseball ? 0.24 : 0.18)
+            return Color.accentColor.opacity(programStyle.isHighlighted ? 0.24 : 0.18)
         }
-        if programStyle == .baseball {
+        if programStyle.isHighlighted {
             return Color.green.opacity(0.1)
         }
         return .clear
@@ -346,6 +350,7 @@ private struct ChannelProgramStyleBadge: View {
     var body: some View {
         Text(label)
             .font(.caption2.weight(.semibold))
+            .lineLimit(1)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(backgroundColor)
@@ -354,21 +359,14 @@ private struct ChannelProgramStyleBadge: View {
     }
 
     private var label: String {
-        switch style {
-        case .baseball:
-            return "野球"
-        case .shopping:
-            return "通販"
-        case .normal:
-            return ""
-        }
+        style.genreCode.map(ProgramGenreCatalog.displayName) ?? ""
     }
 
     private var backgroundColor: Color {
         switch style {
-        case .baseball:
+        case .highlighted:
             return Color.green.opacity(0.72)
-        case .shopping:
+        case .dimmed:
             return Color.secondary.opacity(0.16)
         case .normal:
             return .clear
@@ -377,9 +375,9 @@ private struct ChannelProgramStyleBadge: View {
 
     private var foregroundColor: Color {
         switch style {
-        case .baseball:
+        case .highlighted:
             return .white
-        case .shopping:
+        case .dimmed:
             return .secondary
         case .normal:
             return .clear

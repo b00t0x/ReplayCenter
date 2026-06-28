@@ -29,7 +29,8 @@ struct ContentView: View {
             if isChannelSelectorPresented, let channelCatalog = model.channelCatalog {
                 ChannelSelectorView(
                     catalog: channelCatalog,
-                    channelSettings: model.channelSettings
+                    channelSettings: model.channelSettings,
+                    programGenreDisplaySettings: model.settings.programGenreDisplaySettings ?? .preset
                 ) { item in
                     updatePlaybackModeOptionsFromCatalog()
                     model.playChannel(

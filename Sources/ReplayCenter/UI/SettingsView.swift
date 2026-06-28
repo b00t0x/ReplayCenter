@@ -386,6 +386,7 @@ struct SettingsView: View {
             keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile,
             showStreamInfoOverlay: showStreamInfoOverlay,
             channelProgramOverlayVisibility: showChannelProgramOverlayAlways ? .always : .onHover,
+            programGenreDisplaySettings: model.settings.programGenreDisplaySettings ?? .preset,
             largeTilePlayback: largeTilePlayback,
             smallTilePlayback: smallTilePlayback
         )

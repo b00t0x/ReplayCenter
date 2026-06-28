@@ -353,6 +353,9 @@ final class TileGridModel {
         settings.keepFocusOnSingleLargeTile = settings.keepFocusOnSingleLargeTile ?? true
         settings.showStreamInfoOverlay = settings.showStreamInfoOverlay ?? true
         settings.channelProgramOverlayVisibility = settings.channelProgramOverlayVisibility ?? .always
+        settings.programGenreDisplaySettings = settings.programGenreDisplaySettings
+            ?? self.settings.programGenreDisplaySettings
+            ?? .preset
         settings.largeTilePlayback = settings.largeTilePlayback
             ?? self.settings.largeTilePlayback
             ?? config.largeTilePlayback

@@ -62,35 +62,19 @@ struct ScheduleProgram: Decodable, Identifiable, Hashable {
     let audioSamplingRate: Int?
     let audioComponentType: Int?
 
-    var channelSelectorStyle: ChannelProgramStyle {
-        if hasGenre(genre: 1, subGenre: 1) {
-            return .baseball
-        }
-        if hasGenre(genre: 2, subGenre: 4) {
-            return .shopping
-        }
-        return .normal
-    }
-
-    private func hasGenre(genre targetGenre: Int, subGenre targetSubGenre: Int) -> Bool {
+    func hasGenre(_ code: ProgramGenreCode) -> Bool {
         genrePairs.contains { genre, subGenre in
-            genre == targetGenre && subGenre == targetSubGenre
+            code.matches(genre: genre, subGenre: subGenre)
         }
     }
 
-    private var genrePairs: [(genre: Int?, subGenre: Int?)] {
+    var genrePairs: [(genre: Int?, subGenre: Int?)] {
         [
             (genre1, subGenre1),
             (genre2, subGenre2),
             (genre3, subGenre3)
         ]
     }
-}
-
-enum ChannelProgramStyle: Hashable {
-    case normal
-    case baseball
-    case shopping
 }
 
 enum LiveStreamContainer: String, Codable, Hashable {
