@@ -14,7 +14,7 @@ struct SettingsView: View {
     @State private var tileLayoutCategory: TileLayoutCategory
     @State private var keepFocusOnSingleLargeTile: Bool
     @State private var showStreamInfoOverlay: Bool
-    @State private var channelProgramOverlayVisibility: ChannelProgramOverlayVisibility
+    @State private var showChannelProgramOverlayAlways: Bool
     @State private var favoriteChannelIDs: [Int]
     @State private var hiddenChannelIDs: [Int]
     @State private var draggingFavoriteChannelID: Int?
@@ -44,8 +44,8 @@ struct SettingsView: View {
         _showStreamInfoOverlay = State(
             initialValue: model.settings.showStreamInfoOverlay ?? true
         )
-        _channelProgramOverlayVisibility = State(
-            initialValue: model.settings.channelProgramOverlayVisibility ?? .always
+        _showChannelProgramOverlayAlways = State(
+            initialValue: (model.settings.channelProgramOverlayVisibility ?? .always) == .always
         )
         _favoriteChannelIDs = State(initialValue: model.channelSettings.favoriteChannelIDs)
         _hiddenChannelIDs = State(initialValue: model.channelSettings.hiddenChannelIDs)
@@ -183,18 +183,6 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 520)
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("表示")
-                    .font(.headline)
-                Picker("チャンネル/番組情報", selection: $channelProgramOverlayVisibility) {
-                    ForEach(ChannelProgramOverlayVisibility.allCases) { visibility in
-                        Text(visibility.label).tag(visibility)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 260)
-            }
         }
     }
 
@@ -217,8 +205,16 @@ struct SettingsView: View {
                 .frame(maxWidth: 220, alignment: .leading)
             }
 
-            Toggle("ホバー時にストリーム情報を表示", isOn: $showStreamInfoOverlay)
-                .toggleStyle(.switch)
+            VStack(alignment: .leading, spacing: 8) {
+                LeadingSwitchRow(
+                    title: "ホバー時にストリーム情報を表示",
+                    isOn: $showStreamInfoOverlay
+                )
+                LeadingSwitchRow(
+                    title: "チャンネル/番組情報を常時表示",
+                    isOn: $showChannelProgramOverlayAlways
+                )
+            }
 
             VStack(alignment: .leading, spacing: 12) {
                 Text("ストリーム")
@@ -250,8 +246,10 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             sectionTitle("タイル")
 
-            Toggle("フォーカス時にラージタイルへ入れ替え", isOn: $keepFocusOnSingleLargeTile)
-                .toggleStyle(.switch)
+            LeadingSwitchRow(
+                title: "フォーカス時にラージタイルへ入れ替え",
+                isOn: $keepFocusOnSingleLargeTile
+            )
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("配置")
@@ -387,7 +385,7 @@ struct SettingsView: View {
             volumePercent: VolumeLevel.normalized(volumePercent),
             keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile,
             showStreamInfoOverlay: showStreamInfoOverlay,
-            channelProgramOverlayVisibility: channelProgramOverlayVisibility,
+            channelProgramOverlayVisibility: showChannelProgramOverlayAlways ? .always : .onHover,
             largeTilePlayback: largeTilePlayback,
             smallTilePlayback: smallTilePlayback
         )
@@ -444,6 +442,7 @@ struct SettingsView: View {
         var settings = draftChannelSettings
         settings.setFavorite(isFavorite, channelID: channelID)
         favoriteChannelIDs = settings.favoriteChannelIDs
+        hiddenChannelIDs = settings.hiddenChannelIDs
     }
 
     private func moveFavorite(channelID: Int, by offset: Int) {
@@ -455,6 +454,7 @@ struct SettingsView: View {
     private func setHidden(_ isHidden: Bool, channelID: Int) {
         var settings = draftChannelSettings
         settings.setHidden(isHidden, channelID: channelID)
+        favoriteChannelIDs = settings.favoriteChannelIDs
         hiddenChannelIDs = settings.hiddenChannelIDs
     }
 
@@ -669,7 +669,7 @@ private enum TileLayoutCategory: String, CaseIterable, Identifiable {
         case .singleLarge:
             return "大小タイル"
         case .multipleLarge:
-            return "複数大"
+            return "ラージタイル複数"
         }
     }
 
@@ -685,6 +685,9 @@ private enum TileLayoutCategory: String, CaseIterable, Identifiable {
     }
 
     static func category(for layout: TileLayoutConfig) -> TileLayoutCategory {
+        if layout.tileCount == 1 {
+            return .uniform
+        }
         if layout.uiLargeTileCount > 1 {
             return .multipleLarge
         }
@@ -776,7 +779,21 @@ private struct TileLayoutPreview: View {
         if layout.tileCount == 1 || placement.width > 1 || placement.height > 1 {
             return Color.accentColor.opacity(0.72)
         }
-        return Color.white.opacity(0.3)
+        return Color.primary.opacity(0.18)
+    }
+}
+
+private struct LeadingSwitchRow: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+            Text(title)
+        }
     }
 }
 

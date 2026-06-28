@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var model: TileGridModel
-    let titlebarOverlayInset: CGFloat
     let onChannelSelectorPresentationChanged: (Bool) -> Void
     @State private var isChannelSelectorPresented = false
     @State private var channelSelectionTargetIndex: Int?
@@ -84,11 +83,12 @@ struct ContentView: View {
                             volumePercent: model.volumePercent,
                             showStreamInfo: model.settings.showStreamInfoOverlay ?? true,
                             showFocusRing: isWindowHovering,
-                            topOverlayInset: placement.y == 0 ? titlebarOverlayInset : 0,
                             channelProgramInfo: model.channelProgramOverlayInfo(for: tile),
                             channelProgramOverlayVisibility: model.settings.channelProgramOverlayVisibility ?? .always
                         ) {
-                            model.focus(index)
+                            if tile.stream != nil {
+                                model.focus(index)
+                            }
                         } onOpenChannelSelector: {
                             openChannelSelector(for: index)
                         } onSetAudioSelection: { selection in

@@ -9,7 +9,7 @@ struct ChannelSelectorView: View {
     @State private var searchText = ""
     @State private var selectedTab: ChannelSelectorTab = .favorites
     @State private var selectedItemID: ChannelSelectionItem.ID?
-    @State private var scrollTargetItemID: ChannelSelectionItem.ID?
+    @State private var scrollTargetItemID: String?
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
@@ -20,54 +20,58 @@ struct ChannelSelectorView: View {
                     onCancel()
                 }
 
-            VStack(spacing: 0) {
-                HStack {
-                    TextField("チャンネル検索", text: $searchText)
-                        .textFieldStyle(.roundedBorder)
-                        .focused($isSearchFocused)
-                        .onSubmit {
-                            selectHighlightedItem()
+            GeometryReader { proxy in
+                VStack(spacing: 0) {
+                    HStack {
+                        TextField("チャンネル検索", text: $searchText)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($isSearchFocused)
+                            .onSubmit {
+                                selectHighlightedItem()
+                            }
+
+                        Button("更新") {
+                            Task {
+                                await catalog.reload()
+                            }
                         }
 
-                    Button("更新") {
-                        Task {
-                            await catalog.reload()
+                        Button("閉じる") {
+                            onCancel()
+                        }
+                        .keyboardShortcut(.escape, modifiers: [])
+                    }
+                    .padding(12)
+
+                    Picker("分類", selection: $selectedTab) {
+                        ForEach(ChannelSelectorTab.allCases) { tab in
+                            Text(tab.label).tag(tab)
                         }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
 
-                    Button("閉じる") {
-                        onCancel()
+                    if catalog.isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, minHeight: 180)
+                    } else if let errorMessage = catalog.errorMessage {
+                        Text(errorMessage)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, minHeight: 180)
+                    } else {
+                        channelList
                     }
-                    .keyboardShortcut(.escape, modifiers: [])
                 }
-                .padding(12)
-
-                Picker("分類", selection: $selectedTab) {
-                    ForEach(ChannelSelectorTab.allCases) { tab in
-                        Text(tab.label).tag(tab)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-
-                if catalog.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                } else if let errorMessage = catalog.errorMessage {
-                    Text(errorMessage)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                } else {
-                    channelList
-                }
+                .frame(width: 520, height: channelSelectorHeight(in: proxy.size))
+                .background(Color(nsColor: .windowBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .shadow(radius: 20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
-            .frame(width: 520, height: 560)
-            .background(Color(nsColor: .windowBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .shadow(radius: 20)
+            .padding(20)
         }
         .onAppear {
             selectFirstFilteredItem(scrollToSelection: false)
@@ -100,20 +104,31 @@ struct ChannelSelectorView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(filteredItems) { item in
-                        Button {
-                            onSelect(item)
-                        } label: {
-                            ChannelSelectionRow(
-                                item: item,
-                                selected: selectedItemID == item.id
-                            )
+                    ForEach(filteredSections) { section in
+                        if let title = section.title {
+                            Text(title)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 5)
+                                .background(Color(nsColor: .controlBackgroundColor))
                         }
-                        .buttonStyle(.plain)
-                        .id(item.id)
-                        .onHover { isHovering in
-                            if isHovering {
-                                selectedItemID = item.id
+                        ForEach(section.items) { item in
+                            Button {
+                                onSelect(item)
+                            } label: {
+                                ChannelSelectionRow(
+                                    item: item,
+                                    selected: selectedItemID == item.id
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .id(rowID(for: item.id))
+                            .onHover { isHovering in
+                                if isHovering {
+                                    selectedItemID = item.id
+                                }
                             }
                         }
                     }
@@ -145,6 +160,24 @@ struct ChannelSelectorView: View {
         return items
     }
 
+    private var filteredSections: [ChannelSelectorSection] {
+        guard selectedTab != .favorites else {
+            return [ChannelSelectorSection(title: nil, items: filteredItems)]
+        }
+        let currentProgramItems = filteredItems.filter { $0.currentProgram != nil }
+        let noProgramItems = filteredItems.filter { $0.currentProgram == nil }
+        return [
+            ChannelSelectorSection(title: "放送中", items: currentProgramItems),
+            ChannelSelectorSection(title: "番組情報なし", items: noProgramItems)
+        ]
+        .filter { !$0.items.isEmpty }
+    }
+
+    private func channelSelectorHeight(in availableSize: CGSize) -> CGFloat {
+        let availableHeight = max(availableSize.height - 40, 560)
+        return min(availableHeight, 760)
+    }
+
     private func moveSelection(by offset: Int) {
         guard !filteredItems.isEmpty else { return }
         let currentIndex = selectedItemID.flatMap { selectedItemID in
@@ -152,7 +185,7 @@ struct ChannelSelectorView: View {
         } ?? 0
         let nextIndex = min(max(currentIndex + offset, 0), filteredItems.count - 1)
         selectedItemID = filteredItems[nextIndex].id
-        scrollTargetItemID = selectedItemID
+        scrollTargetItemID = rowID(for: filteredItems[nextIndex].id)
     }
 
     private func selectHighlightedItem() {
@@ -168,8 +201,21 @@ struct ChannelSelectorView: View {
     private func selectFirstFilteredItem(scrollToSelection: Bool) {
         selectedItemID = filteredItems.first?.id
         if scrollToSelection {
-            scrollTargetItemID = selectedItemID
+            scrollTargetItemID = selectedItemID.map(rowID)
         }
+    }
+
+    private func rowID(for itemID: ChannelSelectionItem.ID) -> String {
+        "\(selectedTab.rawValue)-\(itemID)"
+    }
+}
+
+private struct ChannelSelectorSection: Identifiable {
+    let title: String?
+    let items: [ChannelSelectionItem]
+
+    var id: String {
+        title ?? "all"
     }
 }
 
@@ -228,7 +274,7 @@ private struct ChannelSelectionRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 } else {
-                    Text("放送中番組なし")
+                    Text("番組情報なし")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }

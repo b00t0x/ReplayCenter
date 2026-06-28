@@ -8,7 +8,6 @@ struct TileView: View {
     let volumePercent: Int
     let showStreamInfo: Bool
     let showFocusRing: Bool
-    let topOverlayInset: CGFloat
     let channelProgramInfo: ChannelProgramOverlayInfo?
     let channelProgramOverlayVisibility: ChannelProgramOverlayVisibility
     let onFocus: () -> Void
@@ -28,16 +27,6 @@ struct TileView: View {
                 .background(Color.black)
                 .overlay {
                     if model.stream == nil {
-                        ZStack {
-                            Rectangle()
-                                .fill(.regularMaterial)
-                            Rectangle()
-                                .fill(Color.white.opacity(0.06))
-                        }
-                    }
-                }
-                .overlay {
-                    if model.stream == nil {
                         Rectangle()
                             .stroke(Color.white.opacity(isHovering ? 0.28 : 0.16), lineWidth: 1)
                     }
@@ -48,9 +37,8 @@ struct TileView: View {
                             info: effectiveChannelProgramInfo,
                             labelColor: labelColor,
                             backgroundOpacity: labelBackgroundOpacity,
-                            maxWidth: max(proxy.size.width * 0.72, 80)
+                            maxWidth: max(proxy.size.width * 0.56, 80)
                         )
-                        .padding(.top, topOverlayInset)
                     }
                 }
                 .overlay {
@@ -74,7 +62,6 @@ struct TileView: View {
                             .background(.black.opacity(0.72))
                             .foregroundStyle(.white)
                             .padding(6)
-                            .padding(.top, topOverlayInset)
                     }
                 }
                 .overlay {
@@ -200,13 +187,15 @@ private struct TileChannelProgramOverlayView: View {
             Text(info.channelName)
                 .font(.caption2.weight(.semibold))
                 .lineLimit(1)
+                .frame(maxWidth: maxWidth, alignment: .leading)
             if let programLine {
                 Text(programLine)
                     .font(.caption2)
                     .lineLimit(1)
+                    .frame(maxWidth: maxWidth, alignment: .leading)
             }
         }
-        .frame(maxWidth: maxWidth, alignment: .leading)
+        .fixedSize(horizontal: true, vertical: true)
         .padding(.horizontal, 5)
         .padding(.vertical, 3)
         .background(.black.opacity(backgroundOpacity))

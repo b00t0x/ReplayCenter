@@ -31,13 +31,17 @@ struct ChannelSettings: Codable, Equatable {
     var normalized: ChannelSettings {
         var seenFavoriteIDs: Set<Int> = []
         var seenHiddenIDs: Set<Int> = []
+        let normalizedHiddenIDs = hiddenChannelIDs.filter { channelID in
+            seenHiddenIDs.insert(channelID).inserted
+        }
+        let hiddenIDSet = Set(normalizedHiddenIDs)
+        let normalizedFavoriteIDs = favoriteChannelIDs.filter { channelID in
+            !hiddenIDSet.contains(channelID)
+                && seenFavoriteIDs.insert(channelID).inserted
+        }
         return ChannelSettings(
-            favoriteChannelIDs: favoriteChannelIDs.filter { channelID in
-                seenFavoriteIDs.insert(channelID).inserted
-            },
-            hiddenChannelIDs: hiddenChannelIDs.filter { channelID in
-                seenHiddenIDs.insert(channelID).inserted
-            }
+            favoriteChannelIDs: normalizedFavoriteIDs,
+            hiddenChannelIDs: normalizedHiddenIDs
         )
     }
 
@@ -67,8 +71,10 @@ struct ChannelSettings: Codable, Equatable {
 
     mutating func setFavorite(_ isFavorite: Bool, channelID: Int) {
         if isFavorite {
-            guard !favoriteChannelIDs.contains(channelID) else { return }
-            favoriteChannelIDs.append(channelID)
+            hiddenChannelIDs.removeAll { $0 == channelID }
+            if !favoriteChannelIDs.contains(channelID) {
+                favoriteChannelIDs.append(channelID)
+            }
         } else {
             favoriteChannelIDs.removeAll { $0 == channelID }
         }
@@ -77,8 +83,10 @@ struct ChannelSettings: Codable, Equatable {
 
     mutating func setHidden(_ isHidden: Bool, channelID: Int) {
         if isHidden {
-            guard !hiddenChannelIDs.contains(channelID) else { return }
-            hiddenChannelIDs.append(channelID)
+            favoriteChannelIDs.removeAll { $0 == channelID }
+            if !hiddenChannelIDs.contains(channelID) {
+                hiddenChannelIDs.append(channelID)
+            }
         } else {
             hiddenChannelIDs.removeAll { $0 == channelID }
         }
