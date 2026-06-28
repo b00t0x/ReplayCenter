@@ -14,6 +14,9 @@ namespace {
 constexpr int TS_PACKET_SIZE = 188;
 constexpr int SYNC_BYTE = 0x47;
 constexpr int PID_PAT = 0x0000;
+constexpr int PID_TIME = 0x0014;
+constexpr int TABLE_ID_TDT = 0x70;
+constexpr int TABLE_ID_TOT = 0x73;
 constexpr int STREAM_TYPE_AAC_ADTS = 0x0f;
 
 void writeAll(FILE *out, const uint8_t *data, size_t size);
@@ -223,6 +226,73 @@ bool parsePmtSection(const uint8_t *section, int sectionSize, std::vector<int> *
         offset += 5 + esInfoLength;
     }
     return !audioPids->empty();
+}
+
+int decodeBcd(uint8_t value)
+{
+    int high = (value >> 4) & 0x0f;
+    int low = value & 0x0f;
+    if (high > 9 || low > 9) {
+        return -1;
+    }
+    return high * 10 + low;
+}
+
+void mjdToGregorian(int mjd, int *year, int *month, int *day)
+{
+    int j = mjd + 2400001 + 68569;
+    int c = 4 * j / 146097;
+    j = j - (146097 * c + 3) / 4;
+    int y = 4000 * (j + 1) / 1461001;
+    j = j - 1461 * y / 4 + 31;
+    int m = 80 * j / 2447;
+    int d = j - 2447 * m / 80;
+    j = m / 11;
+    m = m + 2 - 12 * j;
+    y = 100 * (c - 49) + y + j;
+
+    *year = y;
+    *month = m;
+    *day = d;
+}
+
+bool parseClockSection(
+    const uint8_t *section,
+    int sectionSize,
+    int *year,
+    int *month,
+    int *day,
+    int *hour,
+    int *minute,
+    int *second,
+    std::string *table
+)
+{
+    if (sectionSize < 8 || (section[0] != TABLE_ID_TDT && section[0] != TABLE_ID_TOT)) {
+        return false;
+    }
+
+    int sectionLength = ((section[1] & 0x0f) << 8) | section[2];
+    if (sectionLength + 3 > sectionSize || sectionLength < 5) {
+        return false;
+    }
+
+    int mjd = (section[3] << 8) | section[4];
+    int parsedHour = decodeBcd(section[5]);
+    int parsedMinute = decodeBcd(section[6]);
+    int parsedSecond = decodeBcd(section[7]);
+    if (parsedHour < 0 || parsedHour > 23
+        || parsedMinute < 0 || parsedMinute > 59
+        || parsedSecond < 0 || parsedSecond > 59) {
+        return false;
+    }
+
+    mjdToGregorian(mjd, year, month, day);
+    *hour = parsedHour;
+    *minute = parsedMinute;
+    *second = parsedSecond;
+    *table = section[0] == TABLE_ID_TDT ? "tdt" : "tot";
+    return true;
 }
 
 uint32_t mpegCrc32(const uint8_t *data, size_t size)
@@ -581,6 +651,10 @@ public:
             }
             writeAll(out, packet, TS_PACKET_SIZE);
             return;
+        } else if (pid == PID_TIME && offset >= 0) {
+            handleClockPacket(packet, offset);
+            writeAll(out, packet, TS_PACKET_SIZE);
+            return;
         } else if (pid == pmtPid_ && offset >= 0) {
             std::vector<int> audioPids;
             if (payloadUnitStart(packet)) {
@@ -748,6 +822,54 @@ private:
         return containsPid(audioPids_, pid);
     }
 
+    void handleClockPacket(const uint8_t *packet, int offset)
+    {
+        int year = 0;
+        int month = 0;
+        int day = 0;
+        int hour = 0;
+        int minute = 0;
+        int second = 0;
+        std::string table;
+        if (!appendPsiSection(packet, offset, &clockSection_, &clockSectionExpectedSize_)
+            || !parseClockSection(
+                clockSection_.data(),
+                static_cast<int>(clockSectionExpectedSize_),
+                &year,
+                &month,
+                &day,
+                &hour,
+                &minute,
+                &second,
+                &table
+            )) {
+            return;
+        }
+
+        char value[32];
+        std::snprintf(
+            value,
+            sizeof(value),
+            "%04d-%02d-%02dT%02d:%02d:%02d",
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second
+        );
+        if (lastClockStatus_ == value) {
+            return;
+        }
+        lastClockStatus_ = value;
+        std::fprintf(
+            stderr,
+            "[filter-status] clock=%s table=%s\n",
+            value,
+            table.c_str()
+        );
+    }
+
     int outputAudioPid() const
     {
         if (audioPids_.size() >= 2 && !forcedAudioPid_) {
@@ -870,11 +992,14 @@ private:
     bool forcedAudioPid_ = false;
     std::vector<uint8_t> pmtSection_;
     size_t pmtSectionExpectedSize_ = 0;
+    std::vector<uint8_t> clockSection_;
+    size_t clockSectionExpectedSize_ = 0;
     int pmtOutputCounter_ = 0;
     std::vector<int> audioPids_;
     std::vector<int> lastStatusAudioPids_;
     int lastStatusSelectedAudioPid_ = -1;
     std::string lastAudioState_;
+    std::string lastClockStatus_;
     bool muxSelectedToStereo_ = true;
     std::vector<uint8_t> currentPes_;
     std::vector<uint8_t> aacWorkspace_;

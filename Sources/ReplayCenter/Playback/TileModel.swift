@@ -9,6 +9,7 @@ final class TileModel: Identifiable {
     private(set) var stream: StreamConfig?
     private(set) var playbackState: TilePlaybackState
     private(set) var audioStreamState: AudioStreamState
+    private(set) var broadcastClockState: BroadcastClockState?
     private(set) var currentAudioSelection: AudioSelection
     private(set) var isMuted: Bool
     private(set) var volumePercent: Int
@@ -24,6 +25,7 @@ final class TileModel: Identifiable {
         self.player = Player(instance: instance)
         playbackState = .idle
         audioStreamState = .unknown
+        broadcastClockState = nil
         currentAudioSelection = AudioSelection(audioMode: stream?.audioMode ?? config.audioMode ?? .stereo)
         isMuted = stream?.muted ?? config.startMuted ?? true
         volumePercent = VolumeLevel.normalized(config.volumePercent)
@@ -54,6 +56,7 @@ final class TileModel: Identifiable {
         started = false
         playbackState = .idle
         audioStreamState = .unknown
+        broadcastClockState = nil
         activePipelineID = nil
         player.stop()
         dualMonoFilterPipeline?.stop()
@@ -92,6 +95,7 @@ final class TileModel: Identifiable {
     func shutdown() async {
         playbackState = .idle
         audioStreamState = .unknown
+        broadcastClockState = nil
         activePipelineID = nil
         player.stop()
         dualMonoFilterPipeline?.stop()
@@ -110,6 +114,7 @@ final class TileModel: Identifiable {
         player.stereoMode = currentAudioSelection.filterAudioMode.stereoMode
         playbackState = .starting
         audioStreamState = .unknown
+        broadcastClockState = nil
         activePipelineID = nil
         player.stop()
         dualMonoFilterPipeline?.stop()
@@ -165,6 +170,8 @@ final class TileModel: Identifiable {
             if state.supportsAudioSelectionControls {
                 dualMonoFilterPipeline?.setAudioMode(currentAudioSelection.filterAudioMode)
             }
+        case let .broadcastClockChanged(state):
+            broadcastClockState = state
         case let .streamInputEnded(error):
             if let error {
                 failPlayback("stream input ended: \(error)")
@@ -212,7 +219,7 @@ final class TileModel: Identifiable {
         return config.effectiveDeinterlaceLabel
     }
 
-    var playbackDebugText: String {
+    func streamInfoText(displayPixelSize: CGSize?) -> String {
         guard let stream else { return "未割り当て" }
         let modeText: String
         if let playbackMode = stream.playbackMode {
@@ -229,7 +236,51 @@ final class TileModel: Identifiable {
             sourceText = "source=?"
         }
 
-        return "\(modeText)\n\(sourceText) / deinterlace=\(effectiveDeinterlaceLabel)"
+        var lines = [
+            modeText,
+            "\(sourceText) / deinterlace=\(effectiveDeinterlaceLabel)",
+            "audio=\(audioStreamState.displayText) / \(currentAudioSelection.displayText)"
+        ]
+        if let displayPixelSize {
+            lines.append("input=\(formatOptionalSize(player.videoSize)) / tile=\(formatDisplaySize(displayPixelSize))")
+        }
+        lines.append(inputClockDebugText)
+        return lines.joined(separator: "\n")
+    }
+
+    private func formatOptionalSize(_ size: CGSize?) -> String {
+        guard let size else { return "?" }
+        return formatDisplaySize(size)
+    }
+
+    private func formatDisplaySize(_ size: CGSize) -> String {
+        let width = max(Int(size.width.rounded()), 0)
+        let height = max(Int(size.height.rounded()), 0)
+        return "\(width)x\(height)"
+    }
+
+    private var inputClockDebugText: String {
+        guard let broadcastClockState else {
+            return "inputClock=時刻未取得"
+        }
+        let offsetSeconds = broadcastClockState.delaySeconds
+        let tableSuffix = broadcastClockState.table.map { " \($0)" } ?? ""
+        if offsetSeconds.isFinite {
+            return "inputClock=\(formatDelay(offsetSeconds))\(tableSuffix)"
+        }
+        return "inputClock=?\(tableSuffix)"
+    }
+
+    private func formatDelay(_ seconds: TimeInterval) -> String {
+        let rounded = Int(seconds.rounded())
+        let sign = rounded < 0 ? "-" : ""
+        let absolute = abs(rounded)
+        if absolute < 60 {
+            return "\(sign)\(absolute)s"
+        }
+        let minutes = absolute / 60
+        let remainingSeconds = absolute % 60
+        return "\(sign)\(minutes)m\(String(format: "%02d", remainingSeconds))s"
     }
 
     private func log(_ message: String) {

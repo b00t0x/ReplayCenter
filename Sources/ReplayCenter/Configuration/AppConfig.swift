@@ -83,13 +83,62 @@ struct AppSettings: Codable, Equatable {
     var epgStationBaseURL: URL?
     var volumePercent: Int?
     var keepFocusOnSingleLargeTile: Bool?
+    var showStreamInfoOverlay: Bool?
     var largeTilePlayback: TilePlaybackProfile?
     var smallTilePlayback: TilePlaybackProfile?
+
+    private enum CodingKeys: String, CodingKey {
+        case epgStationBaseURL
+        case volumePercent
+        case keepFocusOnSingleLargeTile
+        case showStreamInfoOverlay
+        case showInputClockOverlay
+        case largeTilePlayback
+        case smallTilePlayback
+    }
+
+    init(
+        epgStationBaseURL: URL?,
+        volumePercent: Int?,
+        keepFocusOnSingleLargeTile: Bool?,
+        showStreamInfoOverlay: Bool?,
+        largeTilePlayback: TilePlaybackProfile?,
+        smallTilePlayback: TilePlaybackProfile?
+    ) {
+        self.epgStationBaseURL = epgStationBaseURL
+        self.volumePercent = volumePercent
+        self.keepFocusOnSingleLargeTile = keepFocusOnSingleLargeTile
+        self.showStreamInfoOverlay = showStreamInfoOverlay
+        self.largeTilePlayback = largeTilePlayback
+        self.smallTilePlayback = smallTilePlayback
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        epgStationBaseURL = try container.decodeIfPresent(URL.self, forKey: .epgStationBaseURL)
+        volumePercent = try container.decodeIfPresent(Int.self, forKey: .volumePercent)
+        keepFocusOnSingleLargeTile = try container.decodeIfPresent(Bool.self, forKey: .keepFocusOnSingleLargeTile)
+        showStreamInfoOverlay = try container.decodeIfPresent(Bool.self, forKey: .showStreamInfoOverlay)
+            ?? container.decodeIfPresent(Bool.self, forKey: .showInputClockOverlay)
+        largeTilePlayback = try container.decodeIfPresent(TilePlaybackProfile.self, forKey: .largeTilePlayback)
+        smallTilePlayback = try container.decodeIfPresent(TilePlaybackProfile.self, forKey: .smallTilePlayback)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(epgStationBaseURL, forKey: .epgStationBaseURL)
+        try container.encodeIfPresent(volumePercent, forKey: .volumePercent)
+        try container.encodeIfPresent(keepFocusOnSingleLargeTile, forKey: .keepFocusOnSingleLargeTile)
+        try container.encodeIfPresent(showStreamInfoOverlay, forKey: .showStreamInfoOverlay)
+        try container.encodeIfPresent(largeTilePlayback, forKey: .largeTilePlayback)
+        try container.encodeIfPresent(smallTilePlayback, forKey: .smallTilePlayback)
+    }
 
     static let empty = AppSettings(
         epgStationBaseURL: nil,
         volumePercent: nil,
         keepFocusOnSingleLargeTile: nil,
+        showStreamInfoOverlay: nil,
         largeTilePlayback: nil,
         smallTilePlayback: nil
     )
@@ -99,6 +148,7 @@ struct AppSettings: Codable, Equatable {
             epgStationBaseURL: config.epgStationBaseURL,
             volumePercent: VolumeLevel.normalized(config.volumePercent),
             keepFocusOnSingleLargeTile: config.keepFocusOnSingleLargeTile ?? true,
+            showStreamInfoOverlay: true,
             largeTilePlayback: config.largeTilePlayback ?? config.defaultPlaybackProfile,
             smallTilePlayback: config.smallTilePlayback ?? config.defaultPlaybackProfile
         )
@@ -112,6 +162,7 @@ struct AppSettings: Codable, Equatable {
             keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile
                 ?? config.keepFocusOnSingleLargeTile
                 ?? true,
+            showStreamInfoOverlay: showStreamInfoOverlay ?? true,
             largeTilePlayback: largeTilePlayback
                 ?? config.largeTilePlayback
                 ?? defaultPlaybackProfile,
@@ -126,6 +177,7 @@ struct AppSettings: Codable, Equatable {
             "epgStationBaseURL=\(epgStationBaseURL?.absoluteString ?? "<nil>")",
             "volumePercent=\(volumePercent.map(String.init) ?? "<nil>")",
             "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")",
+            "showStreamInfoOverlay=\(showStreamInfoOverlay.map(String.init) ?? "<nil>")",
             "largeTilePlayback=\(largeTilePlayback?.summary ?? "<nil>")",
             "smallTilePlayback=\(smallTilePlayback?.summary ?? "<nil>")"
         ].joined(separator: " ")

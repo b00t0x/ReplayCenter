@@ -22,6 +22,10 @@ Current provisional keyboard and mouse controls for development:
 - Press `[` or `]` to change the global volume in 5% steps.
 - Press `L` or `R` to switch the focused tile between primary and secondary
   audio when the stream exposes dual-mono or multiple audio streams.
+- Use the focused tile's hover reload button to reconnect the live stream when
+  the input clock suggests the stream has fallen behind.
+- Use the macOS `表示` menu for global viewing commands: fixed window sizes
+  based on physical pixels, full screen, and the input clock overlay toggle.
 
 ## Requirements
 
@@ -64,7 +68,10 @@ Important defaults:
 - `tileLayout`: fixed tile grid, for example `{ "columns": 3, "rows": 2 }`
 - `startupStreams`: `configured` starts streams from config, `empty` starts with unassigned tiles
 - `keepFocusOnSingleLargeTile`: when a layout has exactly one large tile,
-  focusing a small tile swaps it into the large tile. Defaults to `true`.
+  focusing a small tile swaps it into the large tile. Defaults to `true` and
+  can be toggled from the View menu.
+- `showStreamInfoOverlay`: saved runtime setting that shows stream details on
+  the tile hover overlay. Legacy `showInputClockOverlay` state is still read.
 - `deinterlace`: fallback deinterlace mode, for example `yadif`
 - `networkCachingMs`: `1000`
 - `volumePercent`: global playback volume, clamped to `0` through `100` and
@@ -148,6 +155,13 @@ The filter also detects multiple AAC audio streams. For multi-stream programs it
 rewrites PMT output and drops non-selected audio packets so SwiftVLC sees only
 the selected audio stream. This keeps dual-mono and multi-stream switching on
 the same primary/secondary UI path.
+
+The filter also observes TDT/TOT clock tables when they are present in the TS
+and emits clock status lines to ReplayCenter. The tile hover overlay can show
+the difference between that input stream clock and the current Mac clock.
+This is an input-side clock check, not a measurement of VLC's internal playback
+buffer. Transcoded streams or backend configurations that drop TDT/TOT will
+show the clock as unavailable.
 
 Tile playback state is intentionally minimal:
 

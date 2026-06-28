@@ -22,10 +22,6 @@ struct FocusedTileControlsView: View {
             Divider()
                 .frame(height: 18)
 
-            Text(audioStreamState.displayText)
-                .foregroundStyle(.secondary)
-                .frame(minWidth: 54, alignment: .leading)
-
             audioButton(selection: .primary)
                 .help("主音声")
             audioButton(selection: .secondary)
@@ -46,7 +42,7 @@ struct FocusedTileControlsView: View {
 
             controlButton(title: nil, systemImage: "arrow.clockwise", action: onReload)
                 .disabled(!hasStream)
-                .help("再読み込み")
+                .help("再読み込みして追いつく")
 
             controlButton(title: nil, systemImage: "xmark", action: onClear)
                 .disabled(!hasStream)

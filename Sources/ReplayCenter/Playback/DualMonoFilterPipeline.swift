@@ -4,8 +4,19 @@ import SwiftVLC
 
 enum DualMonoFilterPipelineEvent: Sendable {
     case audioStateChanged(AudioStreamState)
+    case broadcastClockChanged(BroadcastClockState)
     case streamInputEnded(error: String?)
     case filterExited(status: Int32, reason: Int)
+}
+
+struct BroadcastClockState: Equatable, Sendable {
+    let date: Date
+    let receivedAt: Date
+    let table: String?
+
+    var delaySeconds: TimeInterval {
+        receivedAt.timeIntervalSince(date)
+    }
 }
 
 @MainActor
@@ -382,13 +393,60 @@ private final class FilterStatusReader: @unchecked Sendable {
                 result[String(parts[0])] = String(parts[1])
             }
 
-        guard let rawState = fields["audioState"],
-              let state = AudioStreamState(rawValue: rawState) else {
-            fputs("[\(label)] ignored filter status line: \(line)\n", stderr)
+        if let rawState = fields["audioState"],
+           let state = AudioStreamState(rawValue: rawState) {
+            onEvent(.audioStateChanged(state))
             return
         }
 
-        onEvent(.audioStateChanged(state))
+        if let clock = fields["clock"],
+           let date = Self.clockDate(from: clock) {
+            onEvent(.broadcastClockChanged(BroadcastClockState(
+                date: date,
+                receivedAt: Date(),
+                table: fields["table"]
+            )))
+            return
+        }
+
+        if fields["audioState"] != nil || fields["clock"] != nil {
+            fputs("[\(label)] ignored filter status line: \(line)\n", stderr)
+        }
+    }
+
+    private static func clockDate(from value: String) -> Date? {
+        guard value.count == 19 else { return nil }
+        let yearText = value.prefix(4)
+        let monthText = value.dropFirst(5).prefix(2)
+        let dayText = value.dropFirst(8).prefix(2)
+        let hourText = value.dropFirst(11).prefix(2)
+        let minuteText = value.dropFirst(14).prefix(2)
+        let secondText = value.dropFirst(17).prefix(2)
+        guard value[value.index(value.startIndex, offsetBy: 4)] == "-",
+              value[value.index(value.startIndex, offsetBy: 7)] == "-",
+              value[value.index(value.startIndex, offsetBy: 10)] == "T",
+              value[value.index(value.startIndex, offsetBy: 13)] == ":",
+              value[value.index(value.startIndex, offsetBy: 16)] == ":",
+              let year = Int(yearText),
+              let month = Int(monthText),
+              let day = Int(dayText),
+              let hour = Int(hourText),
+              let minute = Int(minuteText),
+              let second = Int(secondText)
+        else {
+            return nil
+        }
+
+        var components = DateComponents()
+        components.calendar = Calendar(identifier: .gregorian)
+        components.timeZone = .current
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = minute
+        components.second = second
+        return components.date
     }
 }
 

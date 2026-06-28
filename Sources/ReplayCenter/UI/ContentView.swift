@@ -76,7 +76,8 @@ struct ContentView: View {
                             model: tile,
                             focused: model.focusedIndex == index,
                             dropTarget: dragTargetIndex == index,
-                            volumePercent: model.volumePercent
+                            volumePercent: model.volumePercent,
+                            showStreamInfo: model.settings.showStreamInfoOverlay ?? true
                         ) {
                             model.focus(index)
                         } onOpenChannelSelector: {

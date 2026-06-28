@@ -6,6 +6,7 @@ struct TileView: View {
     let focused: Bool
     let dropTarget: Bool
     let volumePercent: Int
+    let showStreamInfo: Bool
     let onFocus: () -> Void
     let onOpenChannelSelector: () -> Void
     let onSetAudioSelection: (AudioSelection) -> Void
@@ -14,94 +15,104 @@ struct TileView: View {
     let onIncreaseVolume: () -> Void
     let onReload: () -> Void
     let onClear: () -> Void
+    @Environment(\.displayScale) private var displayScale
     @State private var isHovering = false
 
     var body: some View {
-        VideoView(model.player)
-            .background(Color.black)
-            .overlay {
-                if model.stream == nil {
-                    Color.black
-                }
-            }
-            .overlay(alignment: .topLeading) {
-                Text(title)
-                    .font(.caption2)
-                    .lineLimit(1)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 3)
-                    .background(.black.opacity(labelBackgroundOpacity))
-                    .foregroundStyle(labelColor)
-            }
-            .overlay {
-                if let statusText = model.playbackState.displayText {
-                    Text(statusText)
-                        .font(.caption)
-                        .foregroundStyle(statusColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(.black.opacity(0.65))
-                }
-            }
-            .overlay(alignment: .topTrailing) {
-                if isHovering, model.stream != nil {
-                    Text(model.playbackDebugText)
-                        .font(.caption2.monospaced())
-                        .multilineTextAlignment(.trailing)
-                        .lineLimit(2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
-                        .background(.black.opacity(0.72))
-                        .foregroundStyle(.white)
-                        .padding(6)
-                }
-            }
-            .overlay {
-                Rectangle()
-                    .stroke(focusStrokeColor, lineWidth: dropTarget ? 5 : 2)
-            }
-            .overlay(alignment: .bottom) {
-                if isHovering {
-                    if focused {
-                        FocusedTileControlsView(
-                            hasStream: model.stream != nil,
-                            audioSelection: model.currentAudioSelection,
-                            audioStreamState: model.audioStreamState,
-                            isMuted: model.isMuted,
-                            volumePercent: volumePercent
-                        ) {
-                            onOpenChannelSelector()
-                        } onSetAudioSelection: { selection in
-                            onFocus()
-                            onSetAudioSelection(selection)
-                        } onToggleMuted: {
-                            onToggleMuted()
-                        } onDecreaseVolume: {
-                            onDecreaseVolume()
-                        } onIncreaseVolume: {
-                            onIncreaseVolume()
-                        } onReload: {
-                            onFocus()
-                            onReload()
-                        } onClear: {
-                            onFocus()
-                            onClear()
-                        }
-                        .padding(.bottom, 8)
-                    } else {
-                        ChannelOnlyTileControlsView(onChangeChannel: onOpenChannelSelector)
-                            .padding(.bottom, 8)
+        GeometryReader { proxy in
+            VideoView(model.player)
+                .background(Color.black)
+                .overlay {
+                    if model.stream == nil {
+                        Color.black
                     }
                 }
-            }
-            .contentShape(Rectangle())
-            .gesture(tileTapGesture)
-            .onHover { hovering in
-                isHovering = hovering
-            }
-            .task {
-                model.startIfNeeded()
-            }
+                .overlay(alignment: .topLeading) {
+                    Text(title)
+                        .font(.caption2)
+                        .lineLimit(1)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 3)
+                        .background(.black.opacity(labelBackgroundOpacity))
+                        .foregroundStyle(labelColor)
+                }
+                .overlay {
+                    if let statusText = model.playbackState.displayText {
+                        Text(statusText)
+                            .font(.caption)
+                            .foregroundStyle(statusColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(.black.opacity(0.65))
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if isHovering, model.stream != nil, showStreamInfo {
+                        Text(model.streamInfoText(displayPixelSize: displayPixelSize(for: proxy.size)))
+                            .font(.caption2.monospaced())
+                            .multilineTextAlignment(.trailing)
+                            .lineLimit(5)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.72))
+                            .foregroundStyle(.white)
+                            .padding(6)
+                    }
+                }
+                .overlay {
+                    Rectangle()
+                        .stroke(focusStrokeColor, lineWidth: dropTarget ? 5 : 2)
+                }
+                .overlay(alignment: .bottom) {
+                    if isHovering {
+                        if focused {
+                            FocusedTileControlsView(
+                                hasStream: model.stream != nil,
+                                audioSelection: model.currentAudioSelection,
+                                audioStreamState: model.audioStreamState,
+                                isMuted: model.isMuted,
+                                volumePercent: volumePercent
+                            ) {
+                                onOpenChannelSelector()
+                            } onSetAudioSelection: { selection in
+                                onFocus()
+                                onSetAudioSelection(selection)
+                            } onToggleMuted: {
+                                onToggleMuted()
+                            } onDecreaseVolume: {
+                                onDecreaseVolume()
+                            } onIncreaseVolume: {
+                                onIncreaseVolume()
+                            } onReload: {
+                                onFocus()
+                                onReload()
+                            } onClear: {
+                                onFocus()
+                                onClear()
+                            }
+                            .padding(.bottom, 8)
+                        } else {
+                            ChannelOnlyTileControlsView(onChangeChannel: onOpenChannelSelector)
+                                .padding(.bottom, 8)
+                        }
+                    }
+                }
+                .contentShape(Rectangle())
+                .gesture(tileTapGesture)
+                .onHover { hovering in
+                    isHovering = hovering
+                }
+                .task {
+                    model.startIfNeeded()
+                }
+        }
+    }
+
+    private func displayPixelSize(for pointSize: CGSize) -> CGSize {
+        CGSize(
+            width: pointSize.width * displayScale,
+            height: pointSize.height * displayScale
+        )
     }
 
     private var title: String {

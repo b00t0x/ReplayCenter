@@ -280,6 +280,21 @@ final class TileGridModel {
         applyTileLayout(nextLayout)
     }
 
+    func setShowStreamInfoOverlay(_ isEnabled: Bool) {
+        guard settings.showStreamInfoOverlay != isEnabled else { return }
+        settings.showStreamInfoOverlay = isEnabled
+        onSettingsChanged?(settings)
+    }
+
+    func setKeepFocusOnSingleLargeTile(_ isEnabled: Bool) {
+        guard settings.keepFocusOnSingleLargeTile != isEnabled else { return }
+        settings.keepFocusOnSingleLargeTile = isEnabled
+        if isEnabled {
+            focus(focusedIndex)
+        }
+        onSettingsChanged?(settings)
+    }
+
     @discardableResult
     func applySettings(
         _ settings: AppSettings,
@@ -291,6 +306,7 @@ final class TileGridModel {
         var settings = settings
         settings.volumePercent = normalizedVolume
         settings.keepFocusOnSingleLargeTile = settings.keepFocusOnSingleLargeTile ?? true
+        settings.showStreamInfoOverlay = settings.showStreamInfoOverlay ?? true
         settings.largeTilePlayback = settings.largeTilePlayback
             ?? self.settings.largeTilePlayback
             ?? config.largeTilePlayback

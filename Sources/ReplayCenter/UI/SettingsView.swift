@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var tileLayout: TileLayoutConfig
     @State private var tileLayoutCategory: TileLayoutCategory
     @State private var keepFocusOnSingleLargeTile: Bool
+    @State private var showStreamInfoOverlay: Bool
     @State private var favoriteChannelIDs: [Int]
     @State private var errorMessage: String?
 
@@ -34,6 +35,9 @@ struct SettingsView: View {
         _tileLayoutCategory = State(initialValue: TileLayoutCategory.category(for: model.layout))
         _keepFocusOnSingleLargeTile = State(
             initialValue: model.settings.keepFocusOnSingleLargeTile ?? true
+        )
+        _showStreamInfoOverlay = State(
+            initialValue: model.settings.showStreamInfoOverlay ?? true
         )
         _favoriteChannelIDs = State(initialValue: model.channelSettings.favoriteChannelIDs)
     }
@@ -192,6 +196,8 @@ struct SettingsView: View {
                 .frame(maxWidth: 220, alignment: .leading)
             }
 
+            Toggle("ホバー時にストリーム情報を表示", isOn: $showStreamInfoOverlay)
+
             VStack(alignment: .leading, spacing: 12) {
                 Text("ストリーム")
                     .font(.headline)
@@ -222,7 +228,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             sectionTitle("タイル")
 
-            Toggle("単一ラージを常にフォーカス", isOn: $keepFocusOnSingleLargeTile)
+            Toggle("フォーカス時にラージタイルへ入れ替え", isOn: $keepFocusOnSingleLargeTile)
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("配置")
@@ -336,6 +342,7 @@ struct SettingsView: View {
             epgStationBaseURL: epgStationBaseURL,
             volumePercent: VolumeLevel.normalized(volumePercent),
             keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile,
+            showStreamInfoOverlay: showStreamInfoOverlay,
             largeTilePlayback: largeTilePlayback,
             smallTilePlayback: smallTilePlayback
         )

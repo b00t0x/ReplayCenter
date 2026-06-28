@@ -2,10 +2,25 @@ import AppKit
 import SwiftUI
 import SwiftVLC
 
+private struct FixedWindowScale {
+    let percent: Int
+    let value: CGFloat
+}
+
 @MainActor
-final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
     private static let settingsMinimumContentSize = CGSize(width: 860, height: 560)
     private static let channelSelectorMinimumContentSize = CGSize(width: 560, height: 600)
+    private static let tileBasePixelSize = CGSize(width: 1920, height: 1080)
+    private static let fixedWindowScales = [
+        FixedWindowScale(percent: 50, value: 0.5),
+        FixedWindowScale(percent: 66, value: 2.0 / 3.0),
+        FixedWindowScale(percent: 75, value: 0.75),
+        FixedWindowScale(percent: 100, value: 1.0),
+        FixedWindowScale(percent: 150, value: 1.5),
+        FixedWindowScale(percent: 200, value: 2.0)
+    ]
+    private static let fixedWindowScaleTagBase = 10_000
     private let config: AppConfig
     private let configSource: String?
     private let stateStore: AppStateStore
@@ -176,11 +191,105 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         appMenu.addItem(quitItem)
         appMenuItem.submenu = appMenu
 
+        let viewMenuItem = NSMenuItem(title: "表示", action: nil, keyEquivalent: "")
+        mainMenu.addItem(viewMenuItem)
+
+        let viewMenu = NSMenu(title: "表示")
+        let windowSizeItem = NSMenuItem(title: "ウィンドウサイズ", action: nil, keyEquivalent: "")
+        let windowSizeMenu = NSMenu(title: "ウィンドウサイズ")
+        for (index, scale) in Self.fixedWindowScales.enumerated() {
+            let item = NSMenuItem(
+                title: "\(scale.percent)%",
+                action: #selector(setFixedWindowScale(_:)),
+                keyEquivalent: "\(index + 1)"
+            )
+            item.keyEquivalentModifierMask = [.command, .option]
+            item.tag = Self.fixedWindowScaleTagBase + scale.percent
+            item.target = self
+            windowSizeMenu.addItem(item)
+        }
+        windowSizeItem.submenu = windowSizeMenu
+        viewMenu.addItem(windowSizeItem)
+
+        viewMenu.addItem(.separator())
+        let fullScreenItem = NSMenuItem(
+            title: "フルスクリーンにする",
+            action: #selector(toggleFullScreen(_:)),
+            keyEquivalent: "f"
+        )
+        fullScreenItem.keyEquivalentModifierMask = [.command, .control]
+        fullScreenItem.target = self
+        viewMenu.addItem(fullScreenItem)
+
+        viewMenu.addItem(.separator())
+        let streamInfoItem = NSMenuItem(
+            title: "ストリーム情報を表示",
+            action: #selector(toggleStreamInfoOverlay(_:)),
+            keyEquivalent: ""
+        )
+        streamInfoItem.target = self
+        viewMenu.addItem(streamInfoItem)
+
+        let keepFocusOnLargeTileItem = NSMenuItem(
+            title: "フォーカス時にラージタイルへ入れ替え",
+            action: #selector(toggleKeepFocusOnSingleLargeTile(_:)),
+            keyEquivalent: ""
+        )
+        keepFocusOnLargeTileItem.target = self
+        viewMenu.addItem(keepFocusOnLargeTileItem)
+        viewMenuItem.submenu = viewMenu
+
         NSApp.mainMenu = mainMenu
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(openSettings(_:)):
+            return tileGrid != nil && tileGrid?.isSettingsPresented != true
+        case #selector(setFixedWindowScale(_:)):
+            menuItem.state = fixedWindowScaleState(for: menuItem)
+            return canApplyFixedWindowScale
+        case #selector(toggleFullScreen(_:)):
+            menuItem.title = window?.styleMask.contains(.fullScreen) == true
+                ? "フルスクリーンを解除"
+                : "フルスクリーンにする"
+            return window != nil && overlayBaseContentSize == nil
+        case #selector(toggleStreamInfoOverlay(_:)):
+            menuItem.state = (tileGrid?.settings.showStreamInfoOverlay ?? true) ? .on : .off
+            return tileGrid != nil
+        case #selector(toggleKeepFocusOnSingleLargeTile(_:)):
+            menuItem.state = (tileGrid?.settings.keepFocusOnSingleLargeTile ?? true) ? .on : .off
+            return tileGrid != nil
+        default:
+            return true
+        }
     }
 
     @objc private func openSettings(_ sender: Any?) {
         tileGrid?.presentSettings()
+    }
+
+    @objc private func setFixedWindowScale(_ sender: Any?) {
+        guard let item = sender as? NSMenuItem else { return }
+        let scalePercent = item.tag - Self.fixedWindowScaleTagBase
+        guard let scale = Self.fixedWindowScale(percent: scalePercent) else { return }
+        applyFixedWindowScale(scale.value)
+    }
+
+    @objc private func toggleFullScreen(_ sender: Any?) {
+        window?.toggleFullScreen(sender)
+    }
+
+    @objc private func toggleStreamInfoOverlay(_ sender: Any?) {
+        guard let tileGrid else { return }
+        let currentValue = tileGrid.settings.showStreamInfoOverlay ?? true
+        tileGrid.setShowStreamInfoOverlay(!currentValue)
+    }
+
+    @objc private func toggleKeepFocusOnSingleLargeTile(_ sender: Any?) {
+        guard let tileGrid else { return }
+        let currentValue = tileGrid.settings.keepFocusOnSingleLargeTile ?? true
+        tileGrid.setKeepFocusOnSingleLargeTile(!currentValue)
     }
 
     private static func loadSavedState(from stateStore: AppStateStore) -> AppState? {
@@ -288,6 +397,99 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         let width = max(sourceSize.width, minimumSize.width)
         let height = max(width / aspect, minimumSize.height)
         return CGSize(width: max(height * aspect, minimumSize.width), height: height)
+    }
+
+    private var canApplyFixedWindowScale: Bool {
+        guard let window else { return false }
+        return tileGrid != nil
+            && overlayBaseContentSize == nil
+            && !window.styleMask.contains(.fullScreen)
+    }
+
+    private func applyFixedWindowScale(_ scale: CGFloat) {
+        guard canApplyFixedWindowScale, let window, let tileGrid else { return }
+        let targetContentSize = fixedWindowContentSize(
+            layout: tileGrid.layout,
+            scale: scale,
+            window: window
+        )
+        let targetFrameSize = window.frameRect(
+            forContentRect: NSRect(origin: .zero, size: targetContentSize)
+        ).size
+        let currentFrame = window.frame
+        let anchoredFrame = NSRect(
+            x: currentFrame.minX,
+            y: currentFrame.maxY - targetFrameSize.height,
+            width: targetFrameSize.width,
+            height: targetFrameSize.height
+        )
+        let screen = window.screen ?? NSScreen.main
+        window.setFrame(
+            constrainedWindowFrame(anchoredFrame, on: screen),
+            display: true,
+            animate: false
+        )
+    }
+
+    private func fixedWindowScaleState(for menuItem: NSMenuItem) -> NSControl.StateValue {
+        guard let window, let tileGrid else { return .off }
+        let scalePercent = menuItem.tag - Self.fixedWindowScaleTagBase
+        guard let scale = Self.fixedWindowScale(percent: scalePercent) else { return .off }
+        let currentSize = window.contentLayoutRect.size
+        let expectedSize = fixedWindowContentSize(
+            layout: tileGrid.layout,
+            scale: scale.value,
+            window: window
+        )
+        let tolerance: CGFloat = 1
+        return abs(currentSize.width - expectedSize.width) <= tolerance
+            && abs(currentSize.height - expectedSize.height) <= tolerance ? .on : .off
+    }
+
+    private func fixedWindowContentSize(
+        layout: TileLayoutConfig,
+        scale: CGFloat,
+        window: NSWindow
+    ) -> CGSize {
+        let backingScale = max(window.screen?.backingScaleFactor ?? window.backingScaleFactor, 1)
+        return CGSize(
+            width: CGFloat(layout.columns) * Self.tileBasePixelSize.width * scale / backingScale,
+            height: CGFloat(layout.rows) * Self.tileBasePixelSize.height * scale / backingScale
+        )
+    }
+
+    private func constrainedWindowFrame(_ frame: NSRect, on screen: NSScreen?) -> NSRect {
+        guard let screen else { return frame }
+        let visibleFrame = screen.visibleFrame
+        var constrained = frame
+
+        if constrained.width <= visibleFrame.width {
+            if constrained.maxX > visibleFrame.maxX {
+                constrained.origin.x -= constrained.maxX - visibleFrame.maxX
+            }
+            if constrained.minX < visibleFrame.minX {
+                constrained.origin.x += visibleFrame.minX - constrained.minX
+            }
+        } else {
+            constrained.origin.x = visibleFrame.minX
+        }
+
+        if constrained.height <= visibleFrame.height {
+            if constrained.minY < visibleFrame.minY {
+                constrained.origin.y += visibleFrame.minY - constrained.minY
+            }
+            if constrained.maxY > visibleFrame.maxY {
+                constrained.origin.y -= constrained.maxY - visibleFrame.maxY
+            }
+        } else {
+            constrained.origin.y = visibleFrame.minY
+        }
+
+        return constrained
+    }
+
+    private static func fixedWindowScale(percent: Int) -> FixedWindowScale? {
+        fixedWindowScales.first { $0.percent == percent }
     }
 
     private func applyWindowLayout(_ layout: TileLayoutConfig, to window: NSWindow, resize: Bool) {
