@@ -171,12 +171,30 @@ final class TileGridModel {
         playChannel(channel, at: focusedIndex, focusAfterPlay: true)
     }
 
+    func playChannel(_ item: ChannelSelectionItem, at index: Int, focusAfterPlay: Bool = false) {
+        playChannel(
+            item.channel,
+            title: item.displayName,
+            at: index,
+            focusAfterPlay: focusAfterPlay
+        )
+    }
+
     func playChannel(_ channel: EPGStationChannel, at index: Int, focusAfterPlay: Bool = false) {
+        playChannel(channel, title: channel.name, at: index, focusAfterPlay: focusAfterPlay)
+    }
+
+    private func playChannel(
+        _ channel: EPGStationChannel,
+        title: String,
+        at index: Int,
+        focusAfterPlay: Bool = false
+    ) {
         guard tiles.indices.contains(index), let epgStationClient else { return }
 
         let stream = streamConfig(
             channelID: channel.id,
-            title: channel.name,
+            title: title,
             tileIndex: index,
             epgStationClient: epgStationClient
         )

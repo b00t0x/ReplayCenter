@@ -4,7 +4,28 @@ import Observation
 struct ChannelSelectionItem: Identifiable, Hashable {
     var id: Int { channel.id }
     let channel: EPGStationChannel
+    let displayName: String
+    let category: BroadcastChannelCategory
     let currentProgram: ScheduleProgram?
+}
+
+enum BroadcastChannelCategory: String, CaseIterable, Identifiable, Hashable {
+    case terrestrial
+    case bs
+    case cs
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .terrestrial:
+            return "地上波"
+        case .bs:
+            return "BS"
+        case .cs:
+            return "CS"
+        }
+    }
 }
 
 @MainActor
@@ -47,9 +68,10 @@ final class ChannelCatalogModel {
                 }
             }
 
-            items = channels.map { channel in
-                ChannelSelectionItem(channel: channel, currentProgram: programsByChannelID[channel.id])
-            }
+            items = Self.selectionItems(
+                from: channels,
+                programsByChannelID: programsByChannelID
+            )
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -69,5 +91,52 @@ final class ChannelCatalogModel {
 
     func playbackModeOptions(for container: LiveStreamContainer) -> [EPGStationLiveStreamModeOption] {
         playbackModeOptionsByContainer[container] ?? []
+    }
+
+    private static func selectionItems(
+        from channels: [EPGStationChannel],
+        programsByChannelID: [Int: ScheduleProgram]
+    ) -> [ChannelSelectionItem] {
+        let visibleChannels = channels.compactMap { channel -> (EPGStationChannel, BroadcastChannelCategory)? in
+            guard let category = category(for: channel) else { return nil }
+            return (channel, category)
+        }
+        var seenNameCounts: [String: Int] = [:]
+        return visibleChannels.map { channel, category in
+            let baseName = baseDisplayName(for: channel)
+            let seenCount = seenNameCounts[baseName, default: 0]
+            seenNameCounts[baseName] = seenCount + 1
+            let displayName = seenCount == 0
+                ? baseName
+                : "\(baseName) (\(channel.serviceId))"
+            return ChannelSelectionItem(
+                channel: channel,
+                displayName: displayName,
+                category: category,
+                currentProgram: programsByChannelID[channel.id]
+            )
+        }
+    }
+
+    private static func category(for channel: EPGStationChannel) -> BroadcastChannelCategory? {
+        switch channel.networkId {
+        case 11:
+            return nil
+        case 4:
+            return .bs
+        case 6, 7:
+            return .cs
+        default:
+            return .terrestrial
+        }
+    }
+
+    private static func baseDisplayName(for channel: EPGStationChannel) -> String {
+        let halfWidthName = channel.halfWidthName?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !halfWidthName.isEmpty {
+            return halfWidthName
+        }
+        return String(channel.id)
     }
 }

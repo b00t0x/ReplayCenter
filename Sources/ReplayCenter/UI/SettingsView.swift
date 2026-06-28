@@ -440,8 +440,8 @@ private struct ChannelSettingsRowModel: Identifiable, Hashable {
 
     init(item: ChannelSelectionItem) {
         self.channelID = item.id
-        self.title = item.channel.name
-        self.detail = item.currentProgram?.name
+        self.title = item.displayName
+        self.detail = item.category.label
         self.isMissing = false
     }
 

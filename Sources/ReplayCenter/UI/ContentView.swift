@@ -31,7 +31,7 @@ struct ContentView: View {
                 ) { item in
                     updatePlaybackModeOptionsFromCatalog()
                     model.playChannel(
-                        item.channel,
+                        item,
                         at: channelSelectionTargetIndex ?? model.focusedIndex
                     )
                     closeChannelSelector()

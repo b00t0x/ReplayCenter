@@ -6,6 +6,7 @@ struct ChannelSelectorView: View {
     let onSelect: (ChannelSelectionItem) -> Void
     let onCancel: () -> Void
     @State private var searchText = ""
+    @State private var selectedTab: ChannelSelectorTab = .favorites
     @State private var selectedItemID: ChannelSelectionItem.ID?
     @State private var scrollTargetItemID: ChannelSelectionItem.ID?
     @FocusState private var isSearchFocused: Bool
@@ -40,6 +41,16 @@ struct ChannelSelectorView: View {
                 }
                 .padding(12)
 
+                Picker("分類", selection: $selectedTab) {
+                    ForEach(ChannelSelectorTab.allCases) { tab in
+                        Text(tab.label).tag(tab)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+
                 if catalog.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: 180)
@@ -64,6 +75,9 @@ struct ChannelSelectorView: View {
         .onChange(of: searchText) {
             selectFirstFilteredItem(scrollToSelection: true)
         }
+        .onChange(of: selectedTab) {
+            selectFirstFilteredItem(scrollToSelection: true)
+        }
         .onChange(of: catalog.items) {
             selectFirstFilteredItem(scrollToSelection: true)
         }
@@ -85,23 +99,20 @@ struct ChannelSelectorView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(filteredSections) { section in
-                        ChannelSelectionSectionHeader(title: section.title)
-                        ForEach(section.items) { item in
-                            Button {
-                                onSelect(item)
-                            } label: {
-                                ChannelSelectionRow(
-                                    item: item,
-                                    selected: selectedItemID == item.id
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .id(item.id)
-                            .onHover { isHovering in
-                                if isHovering {
-                                    selectedItemID = item.id
-                                }
+                    ForEach(filteredItems) { item in
+                        Button {
+                            onSelect(item)
+                        } label: {
+                            ChannelSelectionRow(
+                                item: item,
+                                selected: selectedItemID == item.id
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .id(item.id)
+                        .onHover { isHovering in
+                            if isHovering {
+                                selectedItemID = item.id
                             }
                         }
                     }
@@ -115,34 +126,22 @@ struct ChannelSelectorView: View {
         }
     }
 
-    private var filteredSections: [ChannelSelectionSection] {
+    private var filteredItems: [ChannelSelectionItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let orderedItems = channelSettings.orderedItems(catalog.items)
+        let orderedItems = selectedTab.items(
+            from: channelSettings.orderedItems(catalog.items),
+            channelSettings: channelSettings
+        )
         let items: [ChannelSelectionItem]
         if query.isEmpty {
             items = orderedItems
         } else {
             items = orderedItems.filter { item in
-                item.channel.name.localizedCaseInsensitiveContains(query)
+                item.displayName.localizedCaseInsensitiveContains(query)
                     || item.currentProgram?.name.localizedCaseInsensitiveContains(query) == true
             }
         }
-
-        let favoriteItems = items.filter { channelSettings.containsFavorite($0.id) }
-        let regularItems = items.filter { !channelSettings.containsFavorite($0.id) }
-        let onAirItems = regularItems.filter { $0.currentProgram != nil }
-        let offAirItems = regularItems.filter { $0.currentProgram == nil }
-
-        return [
-            ChannelSelectionSection(id: "favorites", title: "お気に入り", items: favoriteItems),
-            ChannelSelectionSection(id: "on-air", title: "放送中", items: onAirItems),
-            ChannelSelectionSection(id: "off-air", title: "放送休止中", items: offAirItems)
-        ]
-        .filter { !$0.items.isEmpty }
-    }
-
-    private var filteredItems: [ChannelSelectionItem] {
-        filteredSections.flatMap(\.items)
+        return items
     }
 
     private func moveSelection(by offset: Int) {
@@ -173,25 +172,41 @@ struct ChannelSelectorView: View {
     }
 }
 
-private struct ChannelSelectionSection: Identifiable {
-    let id: String
-    let title: String
-    let items: [ChannelSelectionItem]
-}
+private enum ChannelSelectorTab: String, CaseIterable, Identifiable {
+    case favorites
+    case terrestrial
+    case bs
+    case cs
 
-private struct ChannelSelectionSectionHeader: View {
-    let title: String
+    var id: String { rawValue }
 
-    var body: some View {
-        Text(title)
-            .font(.caption)
-            .fontWeight(.semibold)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-            .background(.regularMaterial)
+    var label: String {
+        switch self {
+        case .favorites:
+            return "お気に入り"
+        case .terrestrial:
+            return "地上波"
+        case .bs:
+            return "BS"
+        case .cs:
+            return "CS"
+        }
+    }
+
+    func items(
+        from items: [ChannelSelectionItem],
+        channelSettings: ChannelSettings
+    ) -> [ChannelSelectionItem] {
+        switch self {
+        case .favorites:
+            return items.filter { channelSettings.containsFavorite($0.id) }
+        case .terrestrial:
+            return items.filter { $0.category == .terrestrial }
+        case .bs:
+            return items.filter { $0.category == .bs }
+        case .cs:
+            return items.filter { $0.category == .cs }
+        }
     }
 }
 
@@ -202,7 +217,7 @@ private struct ChannelSelectionRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.channel.name)
+                Text(item.displayName)
                     .font(.headline)
                     .lineLimit(1)
 

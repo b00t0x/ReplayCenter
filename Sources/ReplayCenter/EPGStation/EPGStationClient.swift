@@ -15,7 +15,7 @@ struct EPGStationClient {
 
     func fetchBroadcastingSchedules() async throws -> [BroadcastingSchedule] {
         try await get("api/schedules/broadcasting", queryItems: [
-            URLQueryItem(name: "isHalfWidth", value: "false")
+            URLQueryItem(name: "isHalfWidth", value: "true")
         ])
     }
 
