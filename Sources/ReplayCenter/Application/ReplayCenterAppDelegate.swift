@@ -7,11 +7,17 @@ private struct FixedWindowScale {
     let value: CGFloat
 }
 
+@Observable
+final class WindowChromeModel {
+    var isHovering = false
+}
+
 @MainActor
 final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
     private static let settingsMinimumContentSize = CGSize(width: 1040, height: 640)
     private static let channelSelectorMinimumContentSize = CGSize(width: 560, height: 600)
     private static let tileBasePixelSize = CGSize(width: 1920, height: 1080)
+    private static let titlebarOverlayInset: CGFloat = 30
     private static let fixedWindowScales = [
         FixedWindowScale(percent: 50, value: 0.5),
         FixedWindowScale(percent: 66, value: 2.0 / 3.0),
@@ -26,6 +32,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     private let stateStore: AppStateStore
     private let restoredState: AppState?
     private let instance: VLCInstance
+    private let windowChrome = WindowChromeModel()
     private var window: NSWindow?
     private var tileGrid: TileGridModel?
     private var activity: NSObjectProtocol?
@@ -33,6 +40,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     private var shutdownComplete = false
     private var overlayBaseContentSize: CGSize?
     private var overlayRemovedResizable = false
+    private var windowHoverMonitorTokens: [Any] = []
     private weak var terminationReplySender: NSApplication?
 
     init(config: AppConfig, configSource: String?, stateStore: AppStateStore) throws {
@@ -75,6 +83,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         self.tileGrid = tileGrid
         let view = ContentView(
             model: tileGrid,
+            windowChrome: windowChrome,
+            titlebarOverlayInset: Self.titlebarOverlayInset,
             onChannelSelectorPresentationChanged: { [weak self] isPresented in
                 self?.applyOverlayWindowMode(
                     isPresented: isPresented,
@@ -85,13 +95,15 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
         let window = NSWindow(
             contentRect: NSRect(origin: NSPoint(x: 140, y: 140), size: tileGrid.layout.initialWindowSize),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = config.windowTitle ?? "ReplayCenter"
         window.delegate = self
         window.isReleasedWhenClosed = false
+        window.acceptsMouseMovedEvents = true
+        configureTitlebarExperiment(for: window)
         applyWindowLayout(tileGrid.layout, to: window, resize: false)
         tileGrid.onLayoutChanged = { [weak self] layout in
             if self?.tileGrid?.isSettingsPresented != true {
@@ -109,6 +121,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             )
         }
         window.contentView = NSHostingView(rootView: view)
+        installWindowHoverTracking(for: window)
         window.makeKeyAndOrderFront(nil)
         self.window = window
     }
@@ -129,6 +142,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     }
 
     func windowWillClose(_ notification: Notification) {
+        removeWindowHoverTracking()
         window = nil
     }
 
@@ -143,6 +157,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
         guard !shuttingDown else { return }
         shuttingDown = true
+        removeWindowHoverTracking()
         saveCurrentState()
         window?.standardWindowButton(.closeButton)?.isEnabled = false
 
@@ -166,6 +181,65 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             ProcessInfo.processInfo.endActivity(activity)
             self.activity = nil
         }
+    }
+
+    private func configureTitlebarExperiment(for window: NSWindow) {
+        setTitlebarVisible(false, in: window)
+    }
+
+    private func setTitlebarVisible(_ isVisible: Bool, in window: NSWindow?) {
+        guard let window else { return }
+        window.titleVisibility = isVisible ? .visible : .hidden
+        window.titlebarAppearsTransparent = !isVisible
+        for buttonType in [
+            NSWindow.ButtonType.closeButton,
+            .miniaturizeButton,
+            .zoomButton
+        ] {
+            window.standardWindowButton(buttonType)?.isHidden = !isVisible
+        }
+    }
+
+    private func installWindowHoverTracking(for window: NSWindow) {
+        removeWindowHoverTracking()
+        let masks: NSEvent.EventTypeMask = [
+            .mouseMoved,
+            .leftMouseDragged,
+            .rightMouseDragged,
+            .otherMouseDragged
+        ]
+
+        if let localMonitor = NSEvent.addLocalMonitorForEvents(matching: masks, handler: { [weak self, weak window] event in
+            Task { @MainActor in
+                self?.updateWindowHoverState(for: window)
+            }
+            return event
+        }) {
+            windowHoverMonitorTokens.append(localMonitor)
+        }
+
+        if let globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: masks, handler: { [weak self, weak window] _ in
+            Task { @MainActor in
+                self?.updateWindowHoverState(for: window)
+            }
+        }) {
+            windowHoverMonitorTokens.append(globalMonitor)
+        }
+    }
+
+    private func removeWindowHoverTracking() {
+        for token in windowHoverMonitorTokens {
+            NSEvent.removeMonitor(token)
+        }
+        windowHoverMonitorTokens.removeAll()
+    }
+
+    private func updateWindowHoverState(for window: NSWindow?) {
+        guard let window else { return }
+        let isHovering = window.isVisible && window.frame.contains(NSEvent.mouseLocation)
+        guard windowChrome.isHovering != isHovering else { return }
+        windowChrome.isHovering = isHovering
+        setTitlebarVisible(isHovering, in: window)
     }
 
     private func installMainMenu() {

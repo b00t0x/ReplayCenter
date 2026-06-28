@@ -8,6 +8,7 @@ struct TileView: View {
     let volumePercent: Int
     let showStreamInfo: Bool
     let showFocusRing: Bool
+    let topOverlayInset: CGFloat
     let channelProgramInfo: ChannelProgramOverlayInfo?
     let channelProgramOverlayVisibility: ChannelProgramOverlayVisibility
     let onFocus: () -> Void
@@ -39,6 +40,7 @@ struct TileView: View {
                             backgroundOpacity: labelBackgroundOpacity,
                             maxWidth: max(proxy.size.width * 0.56, 80)
                         )
+                        .padding(.top, topOverlayInset)
                     }
                 }
                 .overlay {

@@ -2,13 +2,14 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var model: TileGridModel
+    @Bindable var windowChrome: WindowChromeModel
+    let titlebarOverlayInset: CGFloat
     let onChannelSelectorPresentationChanged: (Bool) -> Void
     @State private var isChannelSelectorPresented = false
     @State private var channelSelectionTargetIndex: Int?
     @State private var draggingTileIndex: Int?
     @State private var dragTranslation: CGSize = .zero
     @State private var dragTargetIndex: Int?
-    @State private var isWindowHovering = false
 
     var body: some View {
         Group {
@@ -24,7 +25,7 @@ struct ContentView: View {
             }
         }
         .background(Color.black)
-        .onHover { isWindowHovering = $0 }
+        .ignoresSafeArea(.container, edges: .top)
         .overlay {
             if isChannelSelectorPresented, let channelCatalog = model.channelCatalog {
                 ChannelSelectorView(
@@ -82,7 +83,8 @@ struct ContentView: View {
                             dropTarget: dragTargetIndex == index,
                             volumePercent: model.volumePercent,
                             showStreamInfo: model.settings.showStreamInfoOverlay ?? true,
-                            showFocusRing: isWindowHovering,
+                            showFocusRing: windowChrome.isHovering,
+                            topOverlayInset: windowChrome.isHovering && placement.y == 0 ? titlebarOverlayInset : 0,
                             channelProgramInfo: model.channelProgramOverlayInfo(for: tile),
                             channelProgramOverlayVisibility: model.settings.channelProgramOverlayVisibility ?? .always
                         ) {
