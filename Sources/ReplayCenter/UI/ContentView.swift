@@ -3,7 +3,6 @@ import SwiftUI
 struct ContentView: View {
     @Bindable var model: TileGridModel
     @Bindable var windowChrome: WindowChromeModel
-    let titlebarOverlayInset: CGFloat
     let onChannelSelectorPresentationChanged: (Bool) -> Void
     @State private var isChannelSelectorPresented = false
     @State private var channelSelectionTargetIndex: Int?
@@ -58,6 +57,7 @@ struct ContentView: View {
         .task {
             await model.channelCatalog?.loadIfNeeded()
             updatePlaybackModeOptionsFromCatalog()
+            model.refreshFocusedWindowTitle()
             await refreshCurrentProgramsPeriodically()
         }
         .onAppear {
@@ -77,6 +77,11 @@ struct ContentView: View {
                 ForEach(Array(model.tiles.enumerated()), id: \.element.id) { index, tile in
                     if let placement = model.layout.placement(at: index) {
                         let isDragging = draggingTileIndex == index
+                        let topOverlayInset = topOverlayInset(
+                            for: placement,
+                            gridSize: gridSize,
+                            availableSize: proxy.size
+                        )
                         TileView(
                             model: tile,
                             focused: model.focusedIndex == index,
@@ -84,7 +89,7 @@ struct ContentView: View {
                             volumePercent: model.volumePercent,
                             showStreamInfo: model.settings.showStreamInfoOverlay ?? true,
                             showFocusRing: windowChrome.isHovering,
-                            topOverlayInset: windowChrome.isHovering && placement.y == 0 ? titlebarOverlayInset : 0,
+                            topOverlayInset: topOverlayInset,
                             channelProgramInfo: model.channelProgramOverlayInfo(for: tile),
                             channelProgramOverlayVisibility: model.settings.channelProgramOverlayVisibility ?? .always
                         ) {
@@ -138,6 +143,16 @@ struct ContentView: View {
             .frame(width: gridSize.width, height: gridSize.height, alignment: .topLeading)
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
         }
+    }
+
+    private func topOverlayInset(
+        for placement: TilePlacement,
+        gridSize: CGSize,
+        availableSize: CGSize
+    ) -> CGFloat {
+        guard placement.y == 0 else { return 0 }
+        let topLetterboxHeight = max((availableSize.height - gridSize.height) / 2, 0)
+        return max(windowChrome.topOverlayChromeHeight - topLetterboxHeight, 0)
     }
 
     private func fittedGridSize(in availableSize: CGSize) -> CGSize {

@@ -17,6 +17,7 @@ final class TileGridModel {
     @ObservationIgnored var onLayoutChanged: ((TileLayoutConfig) -> Void)?
     @ObservationIgnored var onSettingsChanged: ((AppSettings) -> Void)?
     @ObservationIgnored var onSettingsPresentationChanged: ((Bool) -> Void)?
+    @ObservationIgnored var onFocusedTitleChanged: ((String) -> Void)?
     private var config: AppConfig
     private let instance: VLCInstance
     private let audioOnlyFocusedTile: Bool
@@ -64,6 +65,23 @@ final class TileGridModel {
         focus(0)
     }
 
+    var focusedWindowTitle: String {
+        guard tiles.indices.contains(focusedIndex),
+              let stream = tiles[focusedIndex].stream
+        else {
+            return "ReplayCenter"
+        }
+
+        if let overlayInfo = channelProgramOverlayInfo(for: tiles[focusedIndex]) {
+            return overlayInfo.singleLineText
+        }
+        return stream.title ?? stream.url
+    }
+
+    func refreshFocusedWindowTitle() {
+        notifyFocusedTitleChanged()
+    }
+
     func focus(_ index: Int) {
         guard tiles.indices.contains(index) else { return }
         let targetIndex = promotedFocusIndex(for: index)
@@ -88,6 +106,7 @@ final class TileGridModel {
     private func applyFocus(_ index: Int) {
         guard tiles.indices.contains(index) else { return }
         focusedIndex = index
+        notifyFocusedTitleChanged()
         guard audioOnlyFocusedTile else { return }
 
         for (tileIndex, tile) in tiles.enumerated() {
@@ -201,6 +220,8 @@ final class TileGridModel {
         tiles[index].play(stream: stream)
         if focusAfterPlay {
             focus(index)
+        } else if index == focusedIndex {
+            notifyFocusedTitleChanged()
         }
     }
 
@@ -357,11 +378,16 @@ final class TileGridModel {
 
     func refreshCurrentPrograms() async {
         await channelCatalog?.refreshCurrentPrograms()
+        notifyFocusedTitleChanged()
     }
 
     func channelProgramOverlayInfo(for tile: TileModel) -> ChannelProgramOverlayInfo? {
         guard let channelID = tile.stream?.channelID else { return nil }
         return channelCatalog?.overlayInfo(channelID: channelID)
+    }
+
+    private func notifyFocusedTitleChanged() {
+        onFocusedTitleChanged?(focusedWindowTitle)
     }
 
     private func updateEPGStationClientIfNeeded(previousBaseURL: URL?) {

@@ -13,6 +13,14 @@ struct ChannelProgramOverlayInfo: Hashable {
     let channelName: String
     let programName: String?
     let programTimeText: String?
+
+    var singleLineText: String {
+        guard let programName else { return channelName }
+        if let programTimeText {
+            return "\(channelName) - \(programTimeText) \(programName)"
+        }
+        return "\(channelName) - \(programName)"
+    }
 }
 
 enum BroadcastChannelCategory: String, CaseIterable, Identifiable, Hashable {

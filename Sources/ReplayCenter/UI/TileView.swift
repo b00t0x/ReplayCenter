@@ -63,7 +63,8 @@ struct TileView: View {
                             .padding(.vertical, 4)
                             .background(.black.opacity(0.72))
                             .foregroundStyle(.white)
-                            .padding(6)
+                            .padding(.top, topOverlayInset)
+                            .padding(.trailing, 6)
                     }
                 }
                 .overlay {
