@@ -297,6 +297,21 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         streamInfoItem.target = self
         viewMenu.addItem(streamInfoItem)
 
+        let channelProgramInfoItem = NSMenuItem(title: "チャンネル/番組情報", action: nil, keyEquivalent: "")
+        let channelProgramInfoMenu = NSMenu(title: "チャンネル/番組情報")
+        for visibility in ChannelProgramOverlayVisibility.allCases {
+            let item = NSMenuItem(
+                title: visibility.label,
+                action: #selector(setChannelProgramOverlayVisibility(_:)),
+                keyEquivalent: ""
+            )
+            item.tag = visibility.menuTag
+            item.target = self
+            channelProgramInfoMenu.addItem(item)
+        }
+        channelProgramInfoItem.submenu = channelProgramInfoMenu
+        viewMenu.addItem(channelProgramInfoItem)
+
         let keepFocusOnLargeTileItem = NSMenuItem(
             title: "フォーカス時にラージタイルへ入れ替え",
             action: #selector(toggleKeepFocusOnSingleLargeTile(_:)),
@@ -323,6 +338,14 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             return window != nil && overlayBaseContentSize == nil
         case #selector(toggleStreamInfoOverlay(_:)):
             menuItem.state = (tileGrid?.settings.showStreamInfoOverlay ?? true) ? .on : .off
+            return tileGrid != nil
+        case #selector(setChannelProgramOverlayVisibility(_:)):
+            guard let visibility = ChannelProgramOverlayVisibility(menuTag: menuItem.tag) else {
+                return false
+            }
+            menuItem.state = (tileGrid?.settings.channelProgramOverlayVisibility ?? .always) == visibility
+                ? .on
+                : .off
             return tileGrid != nil
         case #selector(toggleKeepFocusOnSingleLargeTile(_:)):
             menuItem.state = (tileGrid?.settings.keepFocusOnSingleLargeTile ?? true) ? .on : .off
@@ -351,6 +374,15 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         guard let tileGrid else { return }
         let currentValue = tileGrid.settings.showStreamInfoOverlay ?? true
         tileGrid.setShowStreamInfoOverlay(!currentValue)
+    }
+
+    @objc private func setChannelProgramOverlayVisibility(_ sender: Any?) {
+        guard let item = sender as? NSMenuItem,
+              let visibility = ChannelProgramOverlayVisibility(menuTag: item.tag)
+        else {
+            return
+        }
+        tileGrid?.setChannelProgramOverlayVisibility(visibility)
     }
 
     @objc private func toggleKeepFocusOnSingleLargeTile(_ sender: Any?) {
@@ -569,5 +601,27 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         let targetWidth = max(currentSize.width, layout.minimumWindowSize.width)
         let targetHeight = max(targetWidth / aspect, layout.minimumWindowSize.height)
         window.setContentSize(CGSize(width: targetWidth, height: targetHeight))
+    }
+}
+
+private extension ChannelProgramOverlayVisibility {
+    var menuTag: Int {
+        switch self {
+        case .always:
+            return 0
+        case .onHover:
+            return 1
+        }
+    }
+
+    init?(menuTag: Int) {
+        switch menuTag {
+        case 0:
+            self = .always
+        case 1:
+            self = .onHover
+        default:
+            return nil
+        }
     }
 }
