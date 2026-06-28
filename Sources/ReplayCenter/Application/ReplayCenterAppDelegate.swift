@@ -105,6 +105,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         window.delegate = self
         window.isReleasedWhenClosed = false
         window.acceptsMouseMovedEvents = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
         configureTitlebarExperiment(for: window)
         tileGrid.onFocusedTitleChanged = { [weak self] title in
             self?.window?.title = title

@@ -23,7 +23,7 @@ struct ContentView: View {
                 tileGrid
             }
         }
-        .background(Color.black)
+        .background(Color.clear)
         .ignoresSafeArea(.container, edges: .top)
         .overlay {
             if isChannelSelectorPresented, let channelCatalog = model.channelCatalog {
@@ -74,6 +74,23 @@ struct ContentView: View {
             let cellHeight = gridSize.height / CGFloat(rows)
 
             ZStack(alignment: .topLeading) {
+                if let draggingTileIndex,
+                   let placement = model.layout.placement(at: draggingTileIndex)
+                {
+                    EmptyTilePanelBackground(isHovering: false)
+                        .overlay {
+                            EmptyTilePanelStroke(isHovering: false)
+                        }
+                        .frame(
+                            width: cellWidth * CGFloat(placement.width),
+                            height: cellHeight * CGFloat(placement.height)
+                        )
+                        .position(
+                            x: cellWidth * (CGFloat(placement.x) + CGFloat(placement.width) / 2),
+                            y: cellHeight * (CGFloat(placement.y) + CGFloat(placement.height) / 2)
+                        )
+                }
+
                 ForEach(Array(model.tiles.enumerated()), id: \.element.id) { index, tile in
                     if let placement = model.layout.placement(at: index) {
                         let isDragging = draggingTileIndex == index

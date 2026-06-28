@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftVLC
 
@@ -24,12 +25,10 @@ struct TileView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            VideoView(model.player)
-                .background(Color.black)
+            tileSurface
                 .overlay {
                     if model.stream == nil {
-                        Rectangle()
-                            .stroke(Color.white.opacity(isHovering ? 0.28 : 0.16), lineWidth: 1)
+                        EmptyTilePanelStroke(isHovering: isHovering)
                     }
                 }
                 .overlay(alignment: .topLeading) {
@@ -116,6 +115,16 @@ struct TileView: View {
         }
     }
 
+    @ViewBuilder
+    private var tileSurface: some View {
+        if model.stream == nil {
+            EmptyTilePanelBackground(isHovering: isHovering)
+        } else {
+            VideoView(model.player)
+                .background(Color.black)
+        }
+    }
+
     private func displayPixelSize(for pointSize: CGSize) -> CGSize {
         CGSize(
             width: pointSize.width * displayScale,
@@ -176,6 +185,54 @@ struct TileView: View {
                         onFocus()
                     }
             )
+    }
+}
+
+struct EmptyTilePanelBackground: View {
+    let isHovering: Bool
+
+    var body: some View {
+        ZStack {
+            BehindWindowVisualEffectView(
+                material: .popover,
+                alphaValue: 1
+            )
+            Rectangle()
+                .fill(Color.white.opacity(isHovering ? 0.08 : 0.05))
+        }
+    }
+}
+
+struct EmptyTilePanelStroke: View {
+    let isHovering: Bool
+
+    var body: some View {
+        Rectangle()
+            .stroke(Color.black.opacity(isHovering ? 0.24 : 0.16), lineWidth: 1)
+    }
+}
+
+private struct BehindWindowVisualEffectView: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let alphaValue: CGFloat
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.material = material
+        view.alphaValue = alphaValue
+        view.state = .active
+        view.isEmphasized = false
+        view.wantsLayer = true
+        view.layer?.isOpaque = false
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.material = material
+        view.blendingMode = .behindWindow
+        view.alphaValue = alphaValue
+        view.state = .active
     }
 }
 
