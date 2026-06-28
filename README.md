@@ -10,20 +10,22 @@ streams as tiles, play audio only from the focused tile, and switch dual-mono or
 multi-stream audio between primary and secondary audio. It also contains the
 first EPGStation API client layer for channel selection.
 
-Current provisional keyboard and mouse controls for development:
+Current keyboard and mouse controls:
 
 - Click a tile to focus it.
 - Drag a tile onto another tile of the same size to swap them.
 - Press `C` to choose a channel for the focused tile.
 - Double-click a tile, or use its hover `選局` button, to choose a channel for
   that tile without moving focus first.
-- Press `Delete` or `Forward Delete` to clear the focused tile.
-- Press `+` / `=` or `-` to grow or shrink the tile layout.
-- Press `[` or `]` to change the global volume in 5% steps.
-- Press `L` or `R` to switch the focused tile between primary and secondary
-  audio when the stream exposes dual-mono or multiple audio streams.
+- Press `Delete` to clear the focused tile.
+- Press `M` to mute or unmute the focused tile.
+- Press `[` or `]` to change the focused tile volume in 5% steps.
+- Use the focused tile's hover controls to switch audio, reload, mute, clear, or
+  adjust volume.
 - Use the focused tile's hover reload button to reconnect the live stream when
   the input clock suggests the stream has fallen behind.
+- Use the macOS `再生` menu for the same commands exposed by the focused tile
+  control panel.
 - Use the macOS `表示` menu for global viewing commands: fixed window sizes
   based on physical pixels, full screen, and the input clock overlay toggle.
 

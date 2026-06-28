@@ -40,6 +40,9 @@ struct FocusedTileControlsView: View {
 
             volumeControls
 
+            Divider()
+                .frame(height: 18)
+
             controlButton(title: nil, systemImage: "arrow.clockwise", action: onReload)
                 .disabled(!hasStream)
                 .help("再読み込みして追いつく")

@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var draggingTileIndex: Int?
     @State private var dragTranslation: CGSize = .zero
     @State private var dragTargetIndex: Int?
+    @FocusState private var isKeyboardFocused: Bool
 
     var body: some View {
         Group {
@@ -54,6 +55,7 @@ struct ContentView: View {
             }
         }
         .focusable()
+        .focused($isKeyboardFocused)
         .focusEffectDisabled()
         .onKeyPress { keyPress in
             handleKeyPress(keyPress)
@@ -66,6 +68,13 @@ struct ContentView: View {
         }
         .onAppear {
             model.focusInitialTileIfNeeded()
+            model.onFocusedChannelSelectionRequested = {
+                openChannelSelector(for: model.focusedIndex)
+            }
+            isKeyboardFocused = true
+        }
+        .onDisappear {
+            model.onFocusedChannelSelectionRequested = nil
         }
     }
 
@@ -274,41 +283,29 @@ struct ContentView: View {
         guard !isChannelSelectorPresented, !model.isSettingsPresented else { return .ignored }
         guard model.tiles.indices.contains(model.focusedIndex) else { return .ignored }
 
-        if keyPress.key == .delete || keyPress.key == .deleteForward {
+        if keyPress.key == .delete {
             model.clearFocusedTile()
             return .handled
         }
 
         let characters = keyPress.characters.lowercased()
-        if characters == "\u{7f}" || characters == "\u{8}" {
+        if characters == "\u{7f}" {
             model.clearFocusedTile()
             return .handled
         }
 
         switch characters {
-        case "l":
-            model.setFocusedAudioSelection(.primary)
-            return .handled
-        case "r":
-            model.setFocusedAudioSelection(.secondary)
-            return .handled
         case "c":
-            openChannelSelector(for: model.focusedIndex)
+            model.requestFocusedChannelSelection()
             return .handled
-        case ",":
-            model.presentSettings()
+        case "m":
+            model.toggleFocusedTileMuted()
             return .handled
         case "[":
             model.decreaseVolume()
             return .handled
         case "]":
             model.increaseVolume()
-            return .handled
-        case "+", "=":
-            model.increaseTileCapacity()
-            return .handled
-        case "-":
-            model.decreaseTileCapacity()
             return .handled
         default:
             return .ignored
@@ -332,6 +329,11 @@ struct ContentView: View {
         isChannelSelectorPresented = false
         channelSelectionTargetIndex = nil
         onChannelSelectorPresentationChanged(false)
+        isKeyboardFocused = false
+        Task { @MainActor in
+            await Task.yield()
+            isKeyboardFocused = true
+        }
     }
 
     private func updatePlaybackModeOptionsFromCatalog() {

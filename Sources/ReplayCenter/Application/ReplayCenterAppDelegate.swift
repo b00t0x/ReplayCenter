@@ -448,6 +448,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         viewMenu.addItem(keepFocusOnLargeTileItem)
         viewMenuItem.submenu = viewMenu
 
+        installPlaybackMenu(in: mainMenu)
+
         NSApp.mainMenu = mainMenu
     }
 
@@ -478,6 +480,90 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         editMenuItem.submenu = editMenu
     }
 
+    private func installPlaybackMenu(in mainMenu: NSMenu) {
+        let playbackMenuItem = NSMenuItem(title: "再生", action: nil, keyEquivalent: "")
+        mainMenu.addItem(playbackMenuItem)
+
+        let playbackMenu = NSMenu(title: "再生")
+
+        let channelSelectionItem = NSMenuItem(
+            title: "選局...",
+            action: #selector(openFocusedChannelSelector(_:)),
+            keyEquivalent: "c"
+        )
+        channelSelectionItem.keyEquivalentModifierMask = []
+        channelSelectionItem.target = self
+        playbackMenu.addItem(channelSelectionItem)
+
+        playbackMenu.addItem(.separator())
+
+        let primaryAudioItem = NSMenuItem(
+            title: "主音声",
+            action: #selector(selectPrimaryAudio(_:)),
+            keyEquivalent: ""
+        )
+        primaryAudioItem.target = self
+        playbackMenu.addItem(primaryAudioItem)
+
+        let secondaryAudioItem = NSMenuItem(
+            title: "副音声",
+            action: #selector(selectSecondaryAudio(_:)),
+            keyEquivalent: ""
+        )
+        secondaryAudioItem.target = self
+        playbackMenu.addItem(secondaryAudioItem)
+
+        playbackMenu.addItem(.separator())
+
+        let muteItem = NSMenuItem(
+            title: "ミュート",
+            action: #selector(toggleFocusedTileMuted(_:)),
+            keyEquivalent: "m"
+        )
+        muteItem.keyEquivalentModifierMask = []
+        muteItem.target = self
+        playbackMenu.addItem(muteItem)
+
+        let decreaseVolumeItem = NSMenuItem(
+            title: "音量を下げる",
+            action: #selector(decreaseFocusedTileVolume(_:)),
+            keyEquivalent: "["
+        )
+        decreaseVolumeItem.keyEquivalentModifierMask = []
+        decreaseVolumeItem.target = self
+        playbackMenu.addItem(decreaseVolumeItem)
+
+        let increaseVolumeItem = NSMenuItem(
+            title: "音量を上げる",
+            action: #selector(increaseFocusedTileVolume(_:)),
+            keyEquivalent: "]"
+        )
+        increaseVolumeItem.keyEquivalentModifierMask = []
+        increaseVolumeItem.target = self
+        playbackMenu.addItem(increaseVolumeItem)
+
+        playbackMenu.addItem(.separator())
+
+        let reloadItem = NSMenuItem(
+            title: "再読み込み",
+            action: #selector(reloadFocusedTile(_:)),
+            keyEquivalent: ""
+        )
+        reloadItem.target = self
+        playbackMenu.addItem(reloadItem)
+
+        let clearTileItem = NSMenuItem(
+            title: "タイルをクリア",
+            action: #selector(clearFocusedTile(_:)),
+            keyEquivalent: "\u{7f}"
+        )
+        clearTileItem.keyEquivalentModifierMask = []
+        clearTileItem.target = self
+        playbackMenu.addItem(clearTileItem)
+
+        playbackMenuItem.submenu = playbackMenu
+    }
+
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
         case #selector(openSettings(_:)):
@@ -501,6 +587,27 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         case #selector(toggleKeepFocusOnSingleLargeTile(_:)):
             menuItem.state = (tileGrid?.settings.keepFocusOnSingleLargeTile ?? true) ? .on : .off
             return tileGrid != nil
+        case #selector(openFocusedChannelSelector(_:)):
+            return canOpenFocusedChannelSelector
+        case #selector(selectPrimaryAudio(_:)):
+            menuItem.state = tileGrid?.focusedTileAudioSelection == .primary ? .on : .off
+            return canUseFocusedAudioSelectionCommand
+        case #selector(selectSecondaryAudio(_:)):
+            menuItem.state = tileGrid?.focusedTileAudioSelection == .secondary ? .on : .off
+            return canUseFocusedAudioSelectionCommand
+        case #selector(toggleFocusedTileMuted(_:)):
+            menuItem.state = tileGrid?.focusedTileIsMuted == true ? .on : .off
+            return canUseFocusedTilePlaybackCommand
+        case #selector(decreaseFocusedTileVolume(_:)):
+            return canUseFocusedTilePlaybackCommand
+                && (tileGrid?.focusedTileVolumePercent ?? VolumeLevel.minimum) > VolumeLevel.minimum
+        case #selector(increaseFocusedTileVolume(_:)):
+            return canUseFocusedTilePlaybackCommand
+                && (tileGrid?.focusedTileVolumePercent ?? VolumeLevel.maximum) < VolumeLevel.maximum
+        case #selector(reloadFocusedTile(_:)):
+            return canUseFocusedTilePlaybackCommand
+        case #selector(clearFocusedTile(_:)):
+            return canUseFocusedTilePlaybackCommand
         default:
             return true
         }
@@ -508,6 +615,38 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
     @objc private func openSettings(_ sender: Any?) {
         tileGrid?.presentSettings()
+    }
+
+    @objc private func openFocusedChannelSelector(_ sender: Any?) {
+        tileGrid?.requestFocusedChannelSelection()
+    }
+
+    @objc private func selectPrimaryAudio(_ sender: Any?) {
+        tileGrid?.setFocusedAudioSelection(.primary)
+    }
+
+    @objc private func selectSecondaryAudio(_ sender: Any?) {
+        tileGrid?.setFocusedAudioSelection(.secondary)
+    }
+
+    @objc private func toggleFocusedTileMuted(_ sender: Any?) {
+        tileGrid?.toggleFocusedTileMuted()
+    }
+
+    @objc private func decreaseFocusedTileVolume(_ sender: Any?) {
+        tileGrid?.decreaseVolume()
+    }
+
+    @objc private func increaseFocusedTileVolume(_ sender: Any?) {
+        tileGrid?.increaseVolume()
+    }
+
+    @objc private func reloadFocusedTile(_ sender: Any?) {
+        tileGrid?.reloadFocusedTile()
+    }
+
+    @objc private func clearFocusedTile(_ sender: Any?) {
+        tileGrid?.clearFocusedTile()
     }
 
     @objc private func setFixedWindowScale(_ sender: Any?) {
@@ -654,6 +793,24 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         return tileGrid != nil
             && overlayBaseContentSize == nil
             && !window.styleMask.contains(.fullScreen)
+    }
+
+    private var canUseFocusedTilePlaybackCommand: Bool {
+        guard let tileGrid else { return false }
+        return overlayBaseContentSize == nil
+            && !tileGrid.isSettingsPresented
+            && tileGrid.focusedTileHasStream
+    }
+
+    private var canUseFocusedAudioSelectionCommand: Bool {
+        canUseFocusedTilePlaybackCommand
+            && tileGrid?.focusedTileSupportsAudioSelection == true
+    }
+
+    private var canOpenFocusedChannelSelector: Bool {
+        guard let tileGrid else { return false }
+        return overlayBaseContentSize == nil
+            && !tileGrid.isSettingsPresented
     }
 
     private func applyFixedWindowScale(_ scale: CGFloat) {

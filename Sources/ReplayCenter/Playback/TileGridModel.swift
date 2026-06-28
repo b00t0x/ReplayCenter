@@ -19,6 +19,7 @@ final class TileGridModel {
     @ObservationIgnored var onSettingsChanged: ((AppSettings) -> Void)?
     @ObservationIgnored var onSettingsPresentationChanged: ((Bool) -> Void)?
     @ObservationIgnored var onFocusedTitleChanged: ((String) -> Void)?
+    @ObservationIgnored var onFocusedChannelSelectionRequested: (() -> Void)?
     private var config: AppConfig
     private let instance: VLCInstance
     private let audioOnlyFocusedTile: Bool
@@ -77,6 +78,31 @@ final class TileGridModel {
             return overlayInfo.singleLineText
         }
         return stream.title ?? stream.url
+    }
+
+    var focusedTileHasStream: Bool {
+        guard tiles.indices.contains(focusedIndex) else { return false }
+        return tiles[focusedIndex].stream != nil
+    }
+
+    var focusedTileVolumePercent: Int {
+        guard tiles.indices.contains(focusedIndex) else { return VolumeLevel.maximum }
+        return tiles[focusedIndex].volumePercent
+    }
+
+    var focusedTileIsMuted: Bool {
+        guard tiles.indices.contains(focusedIndex) else { return false }
+        return tiles[focusedIndex].isMuted
+    }
+
+    var focusedTileAudioSelection: AudioSelection {
+        guard tiles.indices.contains(focusedIndex) else { return AudioSelection(audioMode: .stereo) }
+        return tiles[focusedIndex].currentAudioSelection
+    }
+
+    var focusedTileSupportsAudioSelection: Bool {
+        guard tiles.indices.contains(focusedIndex) else { return false }
+        return tiles[focusedIndex].audioStreamState.supportsAudioSelectionControls
     }
 
     func refreshFocusedWindowTitle() {
@@ -184,6 +210,10 @@ final class TileGridModel {
 
     func playFocusedChannel(_ channel: EPGStationChannel) {
         playChannel(channel, at: focusedIndex, focusAfterPlay: true)
+    }
+
+    func requestFocusedChannelSelection() {
+        onFocusedChannelSelectionRequested?()
     }
 
     func playChannel(_ item: ChannelSelectionItem, at index: Int, focusAfterPlay: Bool = false) {
