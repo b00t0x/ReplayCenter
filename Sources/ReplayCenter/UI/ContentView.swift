@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var draggingTileIndex: Int?
     @State private var dragTranslation: CGSize = .zero
     @State private var dragTargetIndex: Int?
+    @State private var isWindowHovering = false
 
     var body: some View {
         Group {
@@ -23,6 +24,7 @@ struct ContentView: View {
             }
         }
         .background(Color.black)
+        .onHover { isWindowHovering = $0 }
         .overlay {
             if isChannelSelectorPresented, let channelCatalog = model.channelCatalog {
                 ChannelSelectorView(
@@ -48,6 +50,7 @@ struct ContentView: View {
             }
         }
         .focusable()
+        .focusEffectDisabled()
         .onKeyPress { keyPress in
             handleKeyPress(keyPress)
         }
@@ -77,7 +80,8 @@ struct ContentView: View {
                             focused: model.focusedIndex == index,
                             dropTarget: dragTargetIndex == index,
                             volumePercent: model.volumePercent,
-                            showStreamInfo: model.settings.showStreamInfoOverlay ?? true
+                            showStreamInfo: model.settings.showStreamInfoOverlay ?? true,
+                            showFocusRing: isWindowHovering
                         ) {
                             model.focus(index)
                         } onOpenChannelSelector: {

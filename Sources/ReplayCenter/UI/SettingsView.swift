@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -101,7 +102,7 @@ struct SettingsView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
         }
-        .background(.regularMaterial)
+        .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .shadow(radius: 20)
     }

@@ -7,6 +7,7 @@ struct TileView: View {
     let dropTarget: Bool
     let volumePercent: Int
     let showStreamInfo: Bool
+    let showFocusRing: Bool
     let onFocus: () -> Void
     let onOpenChannelSelector: () -> Void
     let onSetAudioSelection: (AudioSelection) -> Void
@@ -24,7 +25,18 @@ struct TileView: View {
                 .background(Color.black)
                 .overlay {
                     if model.stream == nil {
-                        Color.black
+                        ZStack {
+                            Rectangle()
+                                .fill(.regularMaterial)
+                            Rectangle()
+                                .fill(Color.white.opacity(0.06))
+                        }
+                    }
+                }
+                .overlay {
+                    if model.stream == nil {
+                        Rectangle()
+                            .stroke(Color.white.opacity(isHovering ? 0.28 : 0.16), lineWidth: 1)
                     }
                 }
                 .overlay(alignment: .topLeading) {
@@ -136,7 +148,7 @@ struct TileView: View {
         if dropTarget {
             return Color.white.opacity(0.86)
         }
-        return focused ? Color.accentColor : Color.clear
+        return focused && showFocusRing ? Color.accentColor : Color.clear
     }
 
     private var tileTapGesture: some Gesture {

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ChannelSelectorView: View {
@@ -64,7 +65,7 @@ struct ChannelSelectorView: View {
                 }
             }
             .frame(width: 520, height: 560)
-            .background(.regularMaterial)
+            .background(Color(nsColor: .windowBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .shadow(radius: 20)
         }
