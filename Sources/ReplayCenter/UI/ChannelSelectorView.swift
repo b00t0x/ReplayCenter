@@ -279,6 +279,10 @@ private struct ChannelSelectionRow: View {
                     if programStyle.genreCode != nil {
                         ChannelProgramStyleBadge(style: programStyle)
                     }
+
+                    if showsLiveBadge {
+                        ChannelLiveBadge()
+                    }
                 }
 
                 if let program = item.currentProgram {
@@ -312,6 +316,10 @@ private struct ChannelSelectionRow: View {
     private var programStyle: ChannelProgramStyle {
         guard let currentProgram = item.currentProgram else { return .normal }
         return programGenreDisplaySettings.style(for: currentProgram)
+    }
+
+    private var showsLiveBadge: Bool {
+        programStyle.isHighlighted && item.currentProgram?.name.hasPrefix("[生]") == true
     }
 
     private var titleFont: Font {
@@ -382,6 +390,19 @@ private struct ChannelProgramStyleBadge: View {
         case .normal:
             return .clear
         }
+    }
+}
+
+private struct ChannelLiveBadge: View {
+    var body: some View {
+        Text("LIVE")
+            .font(.caption2.weight(.bold))
+            .lineLimit(1)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color.red.opacity(0.86))
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }
 

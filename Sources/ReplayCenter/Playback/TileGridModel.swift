@@ -12,7 +12,7 @@ final class TileGridModel {
     var channelSettings: ChannelSettings
     var playbackModeOptions: [EPGStationLiveStreamModeOption]
     var channelCatalog: ChannelCatalogModel?
-    var volumePercent: Int
+    var defaultVolumePercent: Int
     var isSettingsPresented = false
     @ObservationIgnored var onLayoutChanged: ((TileLayoutConfig) -> Void)?
     @ObservationIgnored var onSettingsChanged: ((AppSettings) -> Void)?
@@ -33,7 +33,7 @@ final class TileGridModel {
             EPGStationLiveStreamModeOption.fallback(mode: initialSettings.largeTilePlayback?.liveStreamMode ?? 0)
         ]
         let initialVolumePercent = VolumeLevel.normalized(initialSettings.volumePercent)
-        self.volumePercent = initialVolumePercent
+        self.defaultVolumePercent = initialVolumePercent
         var config = config
         config.volumePercent = initialVolumePercent
         self.config = config
@@ -167,23 +167,18 @@ final class TileGridModel {
     }
 
     func increaseVolume() {
-        setVolumePercent(VolumeLevel.changed(from: volumePercent, by: VolumeLevel.step))
+        changeFocusedTileVolume(by: VolumeLevel.step)
     }
 
     func decreaseVolume() {
-        setVolumePercent(VolumeLevel.changed(from: volumePercent, by: -VolumeLevel.step))
+        changeFocusedTileVolume(by: -VolumeLevel.step)
     }
 
-    func setVolumePercent(_ percent: Int) {
-        let normalized = VolumeLevel.normalized(percent)
-        guard volumePercent != normalized else { return }
-        volumePercent = normalized
-        settings.volumePercent = normalized
-        config.volumePercent = normalized
-        for tile in tiles {
-            tile.setVolumePercent(normalized)
-        }
-        onSettingsChanged?(settings)
+    private func changeFocusedTileVolume(by offset: Int) {
+        guard tiles.indices.contains(focusedIndex) else { return }
+        let tile = tiles[focusedIndex]
+        guard tile.stream != nil else { return }
+        tile.setVolumePercent(VolumeLevel.changed(from: tile.volumePercent, by: offset))
     }
 
     func playFocusedChannel(_ channel: EPGStationChannel) {
@@ -217,7 +212,10 @@ final class TileGridModel {
             tileIndex: index,
             epgStationClient: epgStationClient
         )
-        tiles[index].play(stream: stream)
+        tiles[index].play(
+            stream: stream,
+            initialVolumePercent: VolumeLevel.normalized(settings.volumePercent ?? defaultVolumePercent)
+        )
         if focusAfterPlay {
             focus(index)
         } else if index == focusedIndex {
@@ -369,10 +367,7 @@ final class TileGridModel {
         self.channelSettings = channelSettings.normalized
         config = config.applying(settings)
         updateEPGStationClientIfNeeded(previousBaseURL: previousBaseURL)
-        volumePercent = normalizedVolume
-        for tile in tiles {
-            tile.setVolumePercent(normalizedVolume)
-        }
+        defaultVolumePercent = normalizedVolume
         applyPlaybackProfilesToTiles(restartPolicy: .whenPlaybackPipelineChanges)
         focus(focusedIndex)
         onSettingsChanged?(settings)

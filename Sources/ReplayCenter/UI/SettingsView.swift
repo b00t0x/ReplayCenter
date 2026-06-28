@@ -201,7 +201,7 @@ struct SettingsView: View {
             sectionTitle("再生")
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("音量")
+                Text("音量の初期値")
                     .font(.headline)
                 Stepper(
                     value: $volumePercent,
@@ -232,7 +232,7 @@ struct SettingsView: View {
 
                 HStack(alignment: .top, spacing: 24) {
                     PlaybackProfileEditor(
-                        title: "ラージタイル",
+                        title: "ラージタイル（またはタイル1枚）",
                         profile: $largeTilePlayback,
                         modeOptions: playbackModeOptions(including: largeTilePlayback.liveStreamMode)
                     )
@@ -1118,10 +1118,11 @@ private struct PlaybackProfileEditor: View {
 
     private func deinterlaceOptions(for currentValue: String) -> [(value: String, label: String)] {
         var options: [(value: String, label: String)] = [
-            ("yadif", "yadif"),
-            ("bob", "bob"),
-            ("linear", "linear"),
-            ("blend", "blend"),
+            ("yadif", "yadif (30fps)"),
+            ("yadif2x", "yadif2x (60fps)"),
+            ("bob", "bob (60fps)"),
+            ("linear", "linear (60fps)"),
+            ("blend", "blend (30fps)"),
             ("auto", "auto"),
             ("off", "なし")
         ]
@@ -1399,7 +1400,7 @@ private struct TileLayoutPreview: View {
     }
 
     private func tileColor(for placement: TilePlacement) -> Color {
-        if layout.tileCount == 1 || placement.width > 1 || placement.height > 1 {
+        if placement.width > 1 || placement.height > 1 {
             return Color.accentColor.opacity(0.72)
         }
         return Color.primary.opacity(0.18)

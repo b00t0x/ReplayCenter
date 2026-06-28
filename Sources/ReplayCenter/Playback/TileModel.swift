@@ -41,8 +41,11 @@ final class TileModel: Identifiable {
         start()
     }
 
-    func play(stream: StreamConfig) {
+    func play(stream: StreamConfig, initialVolumePercent: Int? = nil) {
         self.stream = stream
+        if let initialVolumePercent {
+            setVolumePercent(initialVolumePercent)
+        }
         started = true
         start()
     }

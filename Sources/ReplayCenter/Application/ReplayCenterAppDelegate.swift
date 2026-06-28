@@ -15,7 +15,7 @@ final class WindowChromeModel {
 }
 
 @MainActor
-final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
+final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate, NSMenuItemValidation {
     private static let settingsMinimumContentSize = CGSize(width: 1040, height: 640)
     private static let channelSelectorMinimumContentSize = CGSize(width: 560, height: 600)
     private static let tileBasePixelSize = CGSize(width: 1920, height: 1080)
@@ -43,7 +43,9 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     private var overlayBaseContentSize: CGSize?
     private var overlayRemovedResizable = false
     private var lastMeasuredTitlebarHeight: CGFloat = 0
+    private var lastWindowedFrame: WindowFrameState?
     private var windowHoverMonitorTokens: [Any] = []
+    private weak var windowSizeMenu: NSMenu?
     private weak var terminationReplySender: NSApplication?
 
     init(config: AppConfig, configSource: String?, stateStore: AppStateStore) throws {
@@ -52,6 +54,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         let savedState = Self.loadSavedState(from: stateStore)
         let restoredState = configSource == nil ? savedState : nil
         self.restoredState = restoredState
+        self.lastWindowedFrame = restoredState?.windowFrame
         let effectiveConfig = config.applying(restoredState?.settings)
         self.config = effectiveConfig
 
@@ -112,6 +115,11 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             self?.window?.title = title
         }
         applyWindowLayout(tileGrid.layout, to: window, resize: false)
+        if let windowFrame = restoredState?.windowFrame {
+            applyRestoredWindowFrame(windowFrame, to: window)
+        } else {
+            updateCachedWindowFrame(for: window)
+        }
         tileGrid.onLayoutChanged = { [weak self] layout in
             if self?.tileGrid?.isSettingsPresented != true {
                 self?.applyWindowLayout(layout, resize: true)
@@ -155,6 +163,21 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
     func windowDidResize(_ notification: Notification) {
         updateTitlebarMetrics(for: notification.object as? NSWindow)
+        updateCachedWindowFrame(for: notification.object as? NSWindow)
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        saveCurrentState()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        updateCachedWindowFrame(for: notification.object as? NSWindow)
+        saveCurrentState()
+    }
+
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        updateCachedWindowFrame(for: notification.object as? NSWindow, allowDuringFullScreenTransition: true)
+        saveCurrentState()
     }
 
     func windowDidEnterFullScreen(_ notification: Notification) {
@@ -165,6 +188,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     func windowDidExitFullScreen(_ notification: Notification) {
         updateTitlebarMetrics(for: notification.object as? NSWindow)
         updateWindowHoverState(for: notification.object as? NSWindow)
+        updateCachedWindowFrame(for: notification.object as? NSWindow)
+        saveCurrentState()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -342,12 +367,16 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         appMenu.addItem(quitItem)
         appMenuItem.submenu = appMenu
 
+        installEditMenu(in: mainMenu)
+
         let viewMenuItem = NSMenuItem(title: "表示", action: nil, keyEquivalent: "")
         mainMenu.addItem(viewMenuItem)
 
         let viewMenu = NSMenu(title: "表示")
         let windowSizeItem = NSMenuItem(title: "ウィンドウサイズ", action: nil, keyEquivalent: "")
         let windowSizeMenu = NSMenu(title: "ウィンドウサイズ")
+        windowSizeMenu.delegate = self
+        self.windowSizeMenu = windowSizeMenu
         for (index, scale) in Self.fixedWindowScales.enumerated() {
             let item = NSMenuItem(
                 title: "\(scale.percent)%",
@@ -399,6 +428,33 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         viewMenuItem.submenu = viewMenu
 
         NSApp.mainMenu = mainMenu
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === windowSizeMenu else { return }
+        updateFixedWindowScaleMenuStates()
+    }
+
+    private func installEditMenu(in mainMenu: NSMenu) {
+        let editMenuItem = NSMenuItem(title: "編集", action: nil, keyEquivalent: "")
+        mainMenu.addItem(editMenuItem)
+
+        let editMenu = NSMenu(title: "編集")
+        editMenu.addItem(NSMenuItem(title: "取り消す", action: Selector(("undo:")), keyEquivalent: "z"))
+
+        let redoItem = NSMenuItem(title: "やり直す", action: Selector(("redo:")), keyEquivalent: "Z")
+        redoItem.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redoItem)
+        editMenu.addItem(.separator())
+
+        editMenu.addItem(NSMenuItem(title: "カット", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: "コピー", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: "ペースト", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        editMenu.addItem(NSMenuItem(title: "削除", action: #selector(NSText.delete(_:)), keyEquivalent: ""))
+        editMenu.addItem(.separator())
+        editMenu.addItem(NSMenuItem(title: "すべてを選択", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+
+        editMenuItem.submenu = editMenu
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -467,7 +523,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             let state = try stateStore.load()
             if let state {
                 fputs(
-                    "[app] state source=\(stateStore.url.path) tileLayout=\(state.tileLayout.summary) settings=\(state.settings.summary)\n",
+                    "[app] state source=\(stateStore.url.path) tileLayout=\(state.tileLayout.summary) settings=\(state.settings.summary) windowFrame=\(state.windowFrame?.summary ?? "<nil>")\n",
                     stderr
                 )
             } else {
@@ -485,21 +541,24 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         saveState(
             layout: fallbackLayout ?? tileGrid.layout,
             settings: tileGrid.settings,
-            channelSettings: tileGrid.channelSettings
+            channelSettings: tileGrid.channelSettings,
+            windowFrame: currentWindowFrameForSaving()
         )
     }
 
     private func saveState(
         layout: TileLayoutConfig,
         settings: AppSettings,
-        channelSettings: ChannelSettings
+        channelSettings: ChannelSettings,
+        windowFrame: WindowFrameState?
     ) {
         do {
             try stateStore.save(
                 AppState(
                     tileLayout: layout,
                     settings: settings,
-                    channelSettings: channelSettings
+                    channelSettings: channelSettings,
+                    windowFrame: windowFrame
                 )
             )
         } catch {
@@ -599,13 +658,16 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             display: true,
             animate: false
         )
+        updateCachedWindowFrame(for: window)
+        updateFixedWindowScaleMenuStates()
+        saveCurrentState()
     }
 
     private func fixedWindowScaleState(for menuItem: NSMenuItem) -> NSControl.StateValue {
         guard let window, let tileGrid else { return .off }
         let scalePercent = menuItem.tag - Self.fixedWindowScaleTagBase
         guard let scale = Self.fixedWindowScale(percent: scalePercent) else { return .off }
-        let currentSize = window.contentLayoutRect.size
+        let currentSize = window.contentView?.bounds.size ?? window.contentLayoutRect.size
         let expectedSize = fixedWindowContentSize(
             layout: tileGrid.layout,
             scale: scale.value,
@@ -614,6 +676,15 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         let tolerance: CGFloat = 1
         return abs(currentSize.width - expectedSize.width) <= tolerance
             && abs(currentSize.height - expectedSize.height) <= tolerance ? .on : .off
+    }
+
+    private func updateFixedWindowScaleMenuStates() {
+        guard let windowSizeMenu else { return }
+        for item in windowSizeMenu.items {
+            guard item.action == #selector(setFixedWindowScale(_:)) else { continue }
+            item.state = fixedWindowScaleState(for: item)
+            item.isEnabled = canApplyFixedWindowScale
+        }
     }
 
     private func fixedWindowContentSize(
@@ -658,6 +729,58 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         return constrained
     }
 
+    private func applyRestoredWindowFrame(_ windowFrame: WindowFrameState, to window: NSWindow) {
+        let restoredFrame = NSRect(
+            x: windowFrame.x,
+            y: windowFrame.y,
+            width: windowFrame.width,
+            height: windowFrame.height
+        )
+        guard restoredFrame.width > 0, restoredFrame.height > 0 else {
+            updateCachedWindowFrame(for: window)
+            return
+        }
+        let screen = screen(for: restoredFrame) ?? window.screen ?? NSScreen.main
+        window.setFrame(
+            constrainedWindowFrame(restoredFrame, on: screen),
+            display: false,
+            animate: false
+        )
+        updateCachedWindowFrame(for: window)
+    }
+
+    private func screen(for frame: NSRect) -> NSScreen? {
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        if let containingScreen = NSScreen.screens.first(where: { $0.frame.contains(center) }) {
+            return containingScreen
+        }
+        return NSScreen.screens.max { lhs, rhs in
+            lhs.frame.intersection(frame).area < rhs.frame.intersection(frame).area
+        }
+    }
+
+    private func updateCachedWindowFrame(
+        for window: NSWindow?,
+        allowDuringFullScreenTransition: Bool = false
+    ) {
+        guard let window else { return }
+        guard overlayBaseContentSize == nil else { return }
+        guard allowDuringFullScreenTransition || !window.styleMask.contains(.fullScreen) else { return }
+        lastWindowedFrame = WindowFrameState(rect: window.frame)
+    }
+
+    private func currentWindowFrameForSaving() -> WindowFrameState? {
+        guard let window,
+              !window.styleMask.contains(.fullScreen),
+              overlayBaseContentSize == nil
+        else {
+            return lastWindowedFrame
+        }
+        let frame = WindowFrameState(rect: window.frame)
+        lastWindowedFrame = frame
+        return frame
+    }
+
     private static func fixedWindowScale(percent: Int) -> FixedWindowScale? {
         fixedWindowScales.first { $0.percent == percent }
     }
@@ -672,5 +795,13 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         let targetWidth = max(currentSize.width, layout.minimumWindowSize.width)
         let targetHeight = max(targetWidth / aspect, layout.minimumWindowSize.height)
         window.setContentSize(CGSize(width: targetWidth, height: targetHeight))
+        updateCachedWindowFrame(for: window)
+    }
+}
+
+private extension NSRect {
+    var area: CGFloat {
+        guard !isNull else { return 0 }
+        return width * height
     }
 }

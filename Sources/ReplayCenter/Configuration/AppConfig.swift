@@ -603,6 +603,9 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
     }
 
     var optionSummary: String {
+        if tileCount == 1 {
+            return "\(columns)x\(rows)"
+        }
         guard uiLargeTileCount > 0 else {
             return "\(columns)x\(rows)"
         }

@@ -4,15 +4,18 @@ struct AppState: Codable, Equatable {
     var tileLayout: TileLayoutConfig
     var settings: AppSettings
     var channelSettings: ChannelSettings
+    var windowFrame: WindowFrameState?
 
     init(
         tileLayout: TileLayoutConfig,
         settings: AppSettings = .empty,
-        channelSettings: ChannelSettings = .empty
+        channelSettings: ChannelSettings = .empty,
+        windowFrame: WindowFrameState? = nil
     ) {
         self.tileLayout = tileLayout
         self.settings = settings
         self.channelSettings = channelSettings
+        self.windowFrame = windowFrame
     }
 
     init(from decoder: Decoder) throws {
@@ -23,6 +26,38 @@ struct AppState: Codable, Equatable {
             ChannelSettings.self,
             forKey: .channelSettings
         ) ?? .empty
+        windowFrame = try container.decodeIfPresent(WindowFrameState.self, forKey: .windowFrame)
+    }
+}
+
+struct WindowFrameState: Codable, Equatable {
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double
+
+    init(x: Double, y: Double, width: Double, height: Double) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+
+    init(rect: CGRect) {
+        self.init(
+            x: Double(rect.origin.x),
+            y: Double(rect.origin.y),
+            width: Double(rect.size.width),
+            height: Double(rect.size.height)
+        )
+    }
+
+    var rect: CGRect {
+        CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    var summary: String {
+        "x=\(Int(x.rounded())) y=\(Int(y.rounded())) w=\(Int(width.rounded())) h=\(Int(height.rounded()))"
     }
 }
 
