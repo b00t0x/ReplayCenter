@@ -7,6 +7,7 @@ struct ChannelSelectionItem: Identifiable, Hashable {
     let displayName: String
     let category: BroadcastChannelCategory
     let currentProgram: ScheduleProgram?
+    let logoURL: URL?
 }
 
 struct ChannelProgramOverlayInfo: Hashable {
@@ -79,7 +80,10 @@ final class ChannelCatalogModel {
 
             items = Self.selectionItems(
                 from: channels,
-                programsByChannelID: programsByChannelID
+                programsByChannelID: programsByChannelID,
+                logoURL: { [client] channelID in
+                    client.channelLogoURL(channelID: channelID)
+                }
             )
         } catch {
             errorMessage = error.localizedDescription
@@ -113,7 +117,8 @@ final class ChannelCatalogModel {
                     channel: item.channel,
                     displayName: item.displayName,
                     category: item.category,
-                    currentProgram: programsByChannelID[item.id]
+                    currentProgram: programsByChannelID[item.id],
+                    logoURL: item.logoURL
                 )
             }
             errorMessage = nil
@@ -141,7 +146,8 @@ final class ChannelCatalogModel {
 
     private static func selectionItems(
         from channels: [EPGStationChannel],
-        programsByChannelID: [Int: ScheduleProgram]
+        programsByChannelID: [Int: ScheduleProgram],
+        logoURL: (Int) -> URL
     ) -> [ChannelSelectionItem] {
         let visibleChannels = channels.compactMap { channel -> (EPGStationChannel, BroadcastChannelCategory)? in
             guard let category = category(for: channel) else { return nil }
@@ -159,7 +165,8 @@ final class ChannelCatalogModel {
                 channel: channel,
                 displayName: displayName,
                 category: category,
-                currentProgram: programsByChannelID[channel.id]
+                currentProgram: programsByChannelID[channel.id],
+                logoURL: channel.hasLogoData ? logoURL(channel.id) : nil
             )
         }
     }

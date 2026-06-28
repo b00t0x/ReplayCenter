@@ -23,6 +23,10 @@ struct EPGStationClient {
         try await get("api/config")
     }
 
+    func channelLogoURL(channelID: Int) -> URL {
+        appendingPath("api/channels/\(channelID)/logo")
+    }
+
     func liveStreamURL(
         channelID: Int,
         container: LiveStreamContainer = .m2ts,

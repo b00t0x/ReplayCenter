@@ -262,17 +262,28 @@ private struct ChannelSelectionRow: View {
     let selected: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .center, spacing: 10) {
+            ChannelLogoView(url: item.logoURL)
+                .opacity(contentOpacity)
+
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.displayName)
-                    .font(.headline)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(item.displayName)
+                        .font(titleFont)
+                        .lineLimit(1)
+                        .opacity(contentOpacity)
+
+                    if programStyle != .normal {
+                        ChannelProgramStyleBadge(style: programStyle)
+                    }
+                }
 
                 if let program = item.currentProgram {
                     Text("\(program.timeRangeText)  \(program.name)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(programTextStyle)
                         .lineLimit(1)
+                        .opacity(contentOpacity)
                 } else {
                     Text("番組情報なし")
                         .font(.caption)
@@ -284,8 +295,133 @@ private struct ChannelSelectionRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(selected ? Color.accentColor.opacity(0.18) : Color.clear)
+        .background(rowBackground)
+        .overlay(alignment: .leading) {
+            if programStyle == .baseball {
+                Rectangle()
+                    .fill(Color.green.opacity(selected ? 0.72 : 0.5))
+                    .frame(width: 3)
+            }
+        }
         .contentShape(Rectangle())
+    }
+
+    private var programStyle: ChannelProgramStyle {
+        item.currentProgram?.channelSelectorStyle ?? .normal
+    }
+
+    private var titleFont: Font {
+        programStyle == .baseball ? .headline.weight(.bold) : .headline
+    }
+
+    private var programTextStyle: HierarchicalShapeStyle {
+        switch programStyle {
+        case .baseball:
+            return .primary
+        case .shopping:
+            return .tertiary
+        case .normal:
+            return .secondary
+        }
+    }
+
+    private var contentOpacity: Double {
+        programStyle == .shopping && !selected ? 0.48 : 1
+    }
+
+    private var rowBackground: Color {
+        if selected {
+            return Color.accentColor.opacity(programStyle == .baseball ? 0.24 : 0.18)
+        }
+        if programStyle == .baseball {
+            return Color.green.opacity(0.1)
+        }
+        return .clear
+    }
+}
+
+private struct ChannelProgramStyleBadge: View {
+    let style: ChannelProgramStyle
+
+    var body: some View {
+        Text(label)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(backgroundColor)
+            .foregroundStyle(foregroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    private var label: String {
+        switch style {
+        case .baseball:
+            return "野球"
+        case .shopping:
+            return "通販"
+        case .normal:
+            return ""
+        }
+    }
+
+    private var backgroundColor: Color {
+        switch style {
+        case .baseball:
+            return Color.green.opacity(0.72)
+        case .shopping:
+            return Color.secondary.opacity(0.16)
+        case .normal:
+            return .clear
+        }
+    }
+
+    private var foregroundColor: Color {
+        switch style {
+        case .baseball:
+            return .white
+        case .shopping:
+            return .secondary
+        case .normal:
+            return .clear
+        }
+    }
+}
+
+private struct ChannelLogoView: View {
+    let url: URL?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color(nsColor: .controlBackgroundColor))
+            if let url {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case let .success(image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .padding(4)
+                    case .failure:
+                        placeholder
+                    case .empty:
+                        ProgressView()
+                            .controlSize(.small)
+                    @unknown default:
+                        placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: 48, height: 32)
+    }
+
+    private var placeholder: some View {
+        Image(systemName: "tv")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
     }
 }
 
