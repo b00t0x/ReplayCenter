@@ -119,6 +119,7 @@ struct ContentView: View {
                             volumePercent: tile.volumePercent,
                             showStreamInfo: model.settings.showStreamInfoOverlay ?? false,
                             showFocusRing: windowChrome.isHovering,
+                            hoverInteractionsActive: windowChrome.areHoverInteractionsActive,
                             topOverlayInset: topOverlayInset,
                             channelProgramInfo: model.channelProgramOverlayInfo(for: tile),
                             channelProgramOverlayVisibility: model.settings.channelProgramOverlayVisibility ?? .onHover

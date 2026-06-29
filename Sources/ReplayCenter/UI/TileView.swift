@@ -9,6 +9,7 @@ struct TileView: View {
     let volumePercent: Int
     let showStreamInfo: Bool
     let showFocusRing: Bool
+    let hoverInteractionsActive: Bool
     let topOverlayInset: CGFloat
     let channelProgramInfo: ChannelProgramOverlayInfo?
     let channelProgramOverlayVisibility: ChannelProgramOverlayVisibility
@@ -28,7 +29,7 @@ struct TileView: View {
             tileSurface
                 .overlay {
                     if model.stream == nil {
-                        EmptyTilePanelStroke(isHovering: isHovering)
+                        EmptyTilePanelStroke(isHovering: effectiveIsHovering)
                     }
                 }
                 .overlay(alignment: .topLeading) {
@@ -53,7 +54,7 @@ struct TileView: View {
                     }
                 }
                 .overlay(alignment: .topTrailing) {
-                    if isHovering, model.stream != nil, showStreamInfo {
+                    if effectiveIsHovering, model.stream != nil, showStreamInfo {
                         Text(model.streamInfoText(displayPixelSize: displayPixelSize(for: proxy.size)))
                             .font(.caption2.monospaced())
                             .multilineTextAlignment(.trailing)
@@ -71,7 +72,7 @@ struct TileView: View {
                         .stroke(focusStrokeColor, lineWidth: dropTarget ? 5 : 2)
                 }
                 .overlay(alignment: .bottom) {
-                    if isHovering {
+                    if effectiveIsHovering {
                         if focused {
                             FocusedTileControlsView(
                                 hasStream: model.stream != nil,
@@ -118,7 +119,7 @@ struct TileView: View {
     @ViewBuilder
     private var tileSurface: some View {
         if model.stream == nil {
-            EmptyTilePanelBackground(isHovering: isHovering)
+            EmptyTilePanelBackground(isHovering: effectiveIsHovering)
         } else {
             VideoView(model.player)
                 .background(Color.black)
@@ -150,8 +151,12 @@ struct TileView: View {
         case .always:
             return true
         case .onHover:
-            return isHovering
+            return effectiveIsHovering
         }
+    }
+
+    private var effectiveIsHovering: Bool {
+        isHovering && hoverInteractionsActive
     }
 
     private var labelBackgroundOpacity: Double {
