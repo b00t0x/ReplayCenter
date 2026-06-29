@@ -512,7 +512,7 @@ struct SettingsView: View {
             }
             hasVerifiedEPGStationConnection = true
         } catch {
-            errorMessage = "EPGStation に接続できません: \(error.localizedDescription)"
+            errorMessage = epgStationConnectionErrorMessage(error)
             return
         }
 
@@ -572,6 +572,19 @@ struct SettingsView: View {
             return nil
         }
         return url
+    }
+
+    private func epgStationConnectionErrorMessage(_ error: Error) -> String {
+        var message = "EPGStation に接続できません: \(error.localizedDescription)"
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost, .timedOut:
+                message += "\n初回起動時に macOS のローカルネットワークアクセスを許可した直後は、少し待ってからもう一度保存してください。"
+            default:
+                break
+            }
+        }
+        return message
     }
 
     private var draftChannelSettings: ChannelSettings {
