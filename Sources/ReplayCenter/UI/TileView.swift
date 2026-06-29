@@ -146,7 +146,6 @@ struct TileView: View {
     }
 
     private var showsChannelProgramOverlay: Bool {
-        guard model.stream != nil else { return true }
         switch channelProgramOverlayVisibility {
         case .always:
             return true
