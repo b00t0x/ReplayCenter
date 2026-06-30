@@ -48,6 +48,80 @@ swift build --product ReplayCenterStreamFilter
 swift run ReplayCenter
 ```
 
+## Build App Bundle
+
+Use the bundled script to create a local `.app` bundle. The default architecture
+is `x86_64` so local packaging checks stay reasonably fast on the current
+development machine.
+
+```bash
+scripts/build-app.sh
+```
+
+The app is written to `.build/app/ReplayCenter.app` by default. The stream
+filter helper is copied into `Contents/MacOS` next to the main executable, which
+matches ReplayCenter's default helper discovery path.
+
+To build a universal local bundle, build each architecture separately and merge
+the executables with `lipo`:
+
+```bash
+scripts/build-app.sh --arch universal
+```
+
+SwiftPM's one-shot universal build is intentionally avoided because the current
+SwiftVLC/libVLC static library can trip the Apple linker when linked with
+`--arch arm64 --arch x86_64` in a single invocation. Per-architecture builds
+followed by `lipo` have been more reliable.
+
+The script ad-hoc signs the bundle by default. Use `--no-sign` when inspecting
+unsigned build output.
+
+```bash
+scripts/build-app.sh --arch x86_64 --no-sign
+scripts/build-app.sh --arch universal --output .build/app/ReplayCenter-universal.app
+```
+
+App icons can be provided as either a traditional `.icns` file or an Icon
+Composer `.icon` document. The final repository location for icon sources is
+still undecided; for now the script automatically uses `Resources/AppIcon.icns`
+or `Resources/AppIcon.icon` when present. To pass an icon explicitly:
+
+```bash
+scripts/build-app.sh --icon Resources/AppIcon.icon
+```
+
+When a `.icon` document is used, the script compiles it with Xcode's `actool`.
+This writes both `Assets.car` for modern Icon Composer appearances and a
+fallback `AppIcon.icns`. With `CFBundleIconName` present, macOS can use the
+asset catalog icon on Sequoia as well; the `.icns` is kept for tools or
+contexts that still look at the legacy icon file. This path requires Xcode or
+another toolchain that provides `actool`.
+
+To re-test macOS local network permission prompts, build with a temporary bundle
+identifier and run that app:
+
+```bash
+scripts/build-app.sh --bundle-id org.b00t0x.ReplayCenter.LocalNetworkTest
+```
+
+ReplayCenter is not notarized at this stage. If macOS blocks a downloaded build,
+remove quarantine from the installed app:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ReplayCenter.app
+```
+
+During local development, reset ReplayCenter's privacy approvals with:
+
+```bash
+tccutil reset All org.b00t0x.ReplayCenter
+```
+
+On the current development environment, `tccutil reset LocalNetwork ...` does
+not reset the local network approval entry, so use `All` or a temporary bundle
+identifier for first-run permission testing.
+
 ## Config
 
 ReplayCenter can start without a JSON config. Configure the EPGStation URL from
