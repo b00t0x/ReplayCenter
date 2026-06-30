@@ -283,10 +283,6 @@ struct TilePlacement: Codable, Equatable, Hashable {
     var maxX: Int { x + width }
     var maxY: Int { y + height }
     var spansMultipleCells: Bool { width > 1 || height > 1 }
-
-    func hasSameSize(as other: TilePlacement) -> Bool {
-        width == other.width && height == other.height
-    }
 }
 
 struct TileLayoutConfig: Codable, Equatable, Hashable {
@@ -634,7 +630,7 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
         else {
             return false
         }
-        return placements[sourceIndex].hasSameSize(as: placements[targetIndex])
+        return true
     }
 
     private var isUniformGrid: Bool {

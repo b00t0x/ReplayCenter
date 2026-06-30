@@ -119,6 +119,7 @@ final class TileGridModel {
             return false
         }
         tiles.swapAt(sourceIndex, targetIndex)
+        applyPlaybackProfilesToTiles(at: [sourceIndex, targetIndex], restartPolicy: .whenModeChanges)
         applyFocus(focusedIndex)
         return true
     }
