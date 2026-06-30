@@ -4,6 +4,8 @@ struct ContentView: View {
     @Bindable var model: TileGridModel
     @Bindable var windowChrome: WindowChromeModel
     let onChannelSelectorPresentationChanged: (Bool) -> Void
+    let onContentWindowDragChanged: () -> Void
+    let onContentWindowDragEnded: () -> Void
     @State private var isChannelSelectorPresented = false
     @State private var channelSelectionTargetIndex: Int?
     @State private var draggingTileIndex: Int?
@@ -220,6 +222,10 @@ struct ContentView: View {
         DragGesture(minimumDistance: 10)
             .onChanged { value in
                 guard !isChannelSelectorPresented, !model.isSettingsPresented else { return }
+                if model.layout.tileCount == 1 {
+                    onContentWindowDragChanged()
+                    return
+                }
                 draggingTileIndex = sourceIndex
                 dragTranslation = value.translation
                 dragTargetIndex = dropTargetIndex(
@@ -233,6 +239,10 @@ struct ContentView: View {
             .onEnded { value in
                 defer { resetDragState() }
                 guard !isChannelSelectorPresented, !model.isSettingsPresented else { return }
+                if model.layout.tileCount == 1 {
+                    onContentWindowDragEnded()
+                    return
+                }
                 guard let targetIndex = dropTargetIndex(
                     sourceIndex: sourceIndex,
                     sourcePlacement: sourcePlacement,

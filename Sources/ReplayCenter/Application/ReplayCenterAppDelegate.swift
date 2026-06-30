@@ -48,6 +48,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     private var lastWindowedFrame: WindowFrameState?
     private var windowHoverMonitorTokens: [Any] = []
     private var mouseInactivityTask: Task<Void, Never>?
+    private var contentWindowDragStartOrigin: NSPoint?
+    private var contentWindowDragStartMouseLocation: NSPoint?
     private weak var windowSizeMenu: NSMenu?
     private weak var terminationReplySender: NSApplication?
 
@@ -98,6 +100,12 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
                     isPresented: isPresented,
                     minimumContentSize: Self.channelSelectorMinimumContentSize
                 )
+            },
+            onContentWindowDragChanged: { [weak self] in
+                self?.moveWindowForContentDrag()
+            },
+            onContentWindowDragEnded: { [weak self] in
+                self?.finishContentWindowDrag()
             }
         )
 
@@ -164,6 +172,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
     func windowWillClose(_ notification: Notification) {
         removeWindowHoverTracking()
+        contentWindowDragStartOrigin = nil
+        contentWindowDragStartMouseLocation = nil
         window = nil
     }
 
@@ -178,6 +188,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
     func windowDidMove(_ notification: Notification) {
         updateCachedWindowFrame(for: notification.object as? NSWindow)
+        guard contentWindowDragStartOrigin == nil else { return }
         saveCurrentState()
     }
 
@@ -251,6 +262,41 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             fputs("[app] EPGStation config probe failed error=\(error)\n", stderr)
             return false
         }
+    }
+
+    private func moveWindowForContentDrag() {
+        guard let window,
+              overlayBaseContentSize == nil,
+              tileGrid?.isSettingsPresented != true,
+              !window.styleMask.contains(.fullScreen)
+        else {
+            return
+        }
+
+        let currentMouseLocation = NSEvent.mouseLocation
+        if contentWindowDragStartOrigin == nil {
+            contentWindowDragStartOrigin = window.frame.origin
+            contentWindowDragStartMouseLocation = currentMouseLocation
+        }
+
+        guard let startOrigin = contentWindowDragStartOrigin,
+              let startMouseLocation = contentWindowDragStartMouseLocation
+        else {
+            return
+        }
+
+        window.setFrameOrigin(NSPoint(
+            x: startOrigin.x + currentMouseLocation.x - startMouseLocation.x,
+            y: startOrigin.y + currentMouseLocation.y - startMouseLocation.y
+        ))
+    }
+
+    private func finishContentWindowDrag() {
+        guard contentWindowDragStartOrigin != nil else { return }
+        contentWindowDragStartOrigin = nil
+        contentWindowDragStartMouseLocation = nil
+        updateCachedWindowFrame(for: window)
+        saveCurrentState()
     }
 
     private func configureTitlebarExperiment(for window: NSWindow) {
