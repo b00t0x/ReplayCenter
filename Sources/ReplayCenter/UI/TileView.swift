@@ -100,7 +100,11 @@ struct TileView: View {
                             }
                             .padding(.bottom, 8)
                         } else {
-                            ChannelOnlyTileControlsView(onChangeChannel: onOpenChannelSelector)
+                            ChannelOnlyTileControlsView(
+                                hasStream: model.stream != nil,
+                                onChangeChannel: onOpenChannelSelector,
+                                onClear: onClear
+                            )
                                 .padding(.bottom, 8)
                         }
                     }
@@ -276,22 +280,40 @@ private struct TileChannelProgramOverlayView: View {
 }
 
 private struct ChannelOnlyTileControlsView: View {
+    let hasStream: Bool
     let onChangeChannel: () -> Void
+    let onClear: () -> Void
 
     var body: some View {
-        Button(action: onChangeChannel) {
-            HStack(spacing: 4) {
-                Image(systemName: "tv")
-                    .frame(width: 14)
-                Text("選局")
+        HStack(spacing: 6) {
+            controlButton(title: "選局", systemImage: "tv", action: onChangeChannel)
+                .help("チャンネルを選択")
+
+            if hasStream {
+                controlButton(title: nil, systemImage: "xmark", action: onClear)
+                    .help("タイルをクリア")
             }
-            .font(.caption)
-            .padding(.horizontal, 8)
-            .frame(minHeight: 24)
-            .background(.black.opacity(0.72))
-            .foregroundStyle(.white)
+        }
+        .font(.caption)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.72))
+        .foregroundStyle(.white)
+    }
+
+    private func controlButton(title: String?, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .frame(width: 14)
+                if let title {
+                    Text(title)
+                }
+            }
+            .frame(minWidth: title == nil ? 24 : 0, minHeight: 22)
+            .padding(.horizontal, title == nil ? 2 : 5)
+            .background(Color.white.opacity(0.12))
         }
         .buttonStyle(.plain)
-        .help("チャンネルを選択")
     }
 }

@@ -314,9 +314,17 @@ final class TileGridModel {
     }
 
     func clearFocusedTile() {
-        guard tiles.indices.contains(focusedIndex) else { return }
-        tiles[focusedIndex].clear()
-        focus(focusedIndex)
+        clearTile(at: focusedIndex)
+    }
+
+    func clearTile(at index: Int) {
+        guard tiles.indices.contains(index) else { return }
+        tiles[index].clear()
+        if index == focusedIndex {
+            focus(index)
+        } else {
+            applyFocus(focusedIndex)
+        }
     }
 
     func reloadFocusedTile() {

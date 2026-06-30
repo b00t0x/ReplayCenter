@@ -140,7 +140,7 @@ struct ContentView: View {
                         } onReload: {
                             model.reloadFocusedTile()
                         } onClear: {
-                            model.clearFocusedTile()
+                            model.clearTile(at: index)
                         }
                         .frame(
                             width: cellWidth * CGFloat(placement.width),
