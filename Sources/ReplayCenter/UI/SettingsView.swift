@@ -346,6 +346,7 @@ struct SettingsView: View {
 
             LeadingSwitchRow(
                 title: "フォーカス時にラージタイルへ入れ替え",
+                detail: "ラージタイルが1枚だけの配置で有効です。",
                 isOn: $keepFocusOnSingleLargeTile
             )
 
@@ -1484,6 +1485,7 @@ private struct TileLayoutPreview: View {
 
 private struct LeadingSwitchRow: View {
     let title: String
+    var detail: String?
     @Binding var isOn: Bool
 
     var body: some View {
@@ -1491,7 +1493,14 @@ private struct LeadingSwitchRow: View {
             Toggle("", isOn: $isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
-            Text(title)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }

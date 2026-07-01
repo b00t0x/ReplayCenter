@@ -120,7 +120,7 @@ struct ContentView: View {
                             dropTarget: dragTargetIndex == index,
                             volumePercent: tile.volumePercent,
                             showStreamInfo: model.settings.showStreamInfoOverlay ?? false,
-                            showFocusRing: windowChrome.isHovering,
+                            showFocusRing: windowChrome.isHovering && model.layout.tileCount != 1,
                             hoverInteractionsActive: windowChrome.areHoverInteractionsActive,
                             topOverlayInset: topOverlayInset,
                             channelProgramInfo: model.channelProgramOverlayInfo(for: tile),
