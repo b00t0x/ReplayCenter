@@ -1396,7 +1396,7 @@ struct TileLayoutQuickPickerPanel: View {
             }
         }
         .padding(20)
-        .frame(width: 900, alignment: .topLeading)
+        .frame(width: 900, height: 540, alignment: .topLeading)
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .shadow(radius: 20)
@@ -1413,6 +1413,7 @@ private struct TileLayoutSettingsContent: View {
         repeating: GridItem(.fixed(126), spacing: 12),
         count: 6
     )
+    private let gridReservedHeight: CGFloat = 336
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -1449,6 +1450,7 @@ private struct TileLayoutSettingsContent: View {
                         }
                     }
                 }
+                .frame(height: gridReservedHeight, alignment: .topLeading)
             }
         }
     }
