@@ -27,6 +27,18 @@ USAGE
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export CLANG_MODULE_CACHE_PATH="${CLANG_MODULE_CACHE_PATH:-$repo_root/.build/module-cache}"
+version_file="$repo_root/VERSION"
+
+if [[ ! -f "$version_file" ]]; then
+  echo "VERSION file not found: $version_file" >&2
+  exit 1
+fi
+
+app_version="$(tr -d '[:space:]' < "$version_file")"
+if [[ ! "$app_version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+  echo "VERSION must be numeric with up to three dot-separated components: $app_version" >&2
+  exit 1
+fi
 
 swift_bin="${SWIFT:-}"
 if [[ -z "$swift_bin" ]]; then
@@ -285,9 +297,9 @@ create_bundle() {
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.0.1</string>
+  <string>$app_version</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>$app_version</string>
   <key>LSMinimumSystemVersion</key>
   <string>15.0</string>
   <key>NSHighResolutionCapable</key>

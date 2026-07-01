@@ -478,6 +478,15 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         mainMenu.addItem(appMenuItem)
 
         let appMenu = NSMenu()
+        let aboutItem = NSMenuItem(
+            title: "ReplayCenter について",
+            action: #selector(showAboutPanel(_:)),
+            keyEquivalent: ""
+        )
+        aboutItem.target = self
+        appMenu.addItem(aboutItem)
+        appMenu.addItem(.separator())
+
         let settingsItem = NSMenuItem(
             title: "設定...",
             action: #selector(openSettings(_:)),
@@ -673,6 +682,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
+        case #selector(showAboutPanel(_:)):
+            return true
         case #selector(openSettings(_:)):
             return tileGrid != nil && tileGrid?.isSettingsPresented != true
         case #selector(setFixedWindowScale(_:)):
@@ -718,6 +729,15 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         default:
             return true
         }
+    }
+
+    @objc private func showAboutPanel(_ sender: Any?) {
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "ReplayCenter",
+            .applicationIcon: aboutPanelIcon,
+            .applicationVersion: appDisplayVersion,
+            .version: appDisplayVersion
+        ])
     }
 
     @objc private func openSettings(_ sender: Any?) {
@@ -922,6 +942,54 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         guard let tileGrid else { return false }
         return overlayBaseContentSize == nil
             && !tileGrid.isSettingsPresented
+    }
+
+    private var appDisplayVersion: String {
+        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+           !version.isEmpty
+        {
+            return version
+        }
+        if let version = developmentVersionFileValue {
+            return version
+        }
+        return "Development"
+    }
+
+    private var developmentVersionFileValue: String? {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+        let candidates = [
+            sourceURL
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("VERSION"),
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent("VERSION")
+        ]
+
+        for url in candidates {
+            if let value = try? String(contentsOf: url, encoding: .utf8)
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty
+            {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private var aboutPanelIcon: NSImage {
+        if let icon = NSImage(named: NSImage.applicationIconName) {
+            return icon
+        }
+        if let resourceURL = Bundle.main.resourceURL?.appendingPathComponent("AppIcon.icns"),
+           let icon = NSImage(contentsOf: resourceURL)
+        {
+            return icon
+        }
+        return NSApp.applicationIconImage
     }
 
     private func applyFixedWindowScale(_ scale: CGFloat) {

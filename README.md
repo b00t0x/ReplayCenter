@@ -62,6 +62,9 @@ The app is written to `.build/app/ReplayCenter.app` by default. The stream
 filter helper is copied into `Contents/MacOS` next to the main executable, which
 matches ReplayCenter's default helper discovery path.
 
+The app version is managed in `VERSION`. `scripts/build-app.sh` uses that value
+for both `CFBundleShortVersionString` and `CFBundleVersion`.
+
 To build a universal local bundle, build each architecture separately and merge
 the executables with `lipo`:
 
