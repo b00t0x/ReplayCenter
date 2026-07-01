@@ -11,9 +11,6 @@ struct SettingsView: View {
     @State private var volumePercent: Int
     @State private var largeTilePlayback: TilePlaybackProfile
     @State private var smallTilePlayback: TilePlaybackProfile
-    @State private var tileLayout: TileLayoutConfig
-    @State private var tileLayoutCategory: TileLayoutCategory
-    @State private var keepFocusOnSingleLargeTile: Bool
     @State private var showStreamInfoOverlay: Bool
     @State private var showChannelProgramOverlayAlways: Bool
     @State private var highlightedProgramGenres: [ProgramGenreCode]
@@ -46,11 +43,6 @@ struct SettingsView: View {
         _smallTilePlayback = State(
             initialValue: model.settings.smallTilePlayback ?? TilePlaybackProfile.fallback
         )
-        _tileLayout = State(initialValue: model.layout)
-        _tileLayoutCategory = State(initialValue: TileLayoutCategory.category(for: model.layout))
-        _keepFocusOnSingleLargeTile = State(
-            initialValue: model.settings.keepFocusOnSingleLargeTile ?? true
-        )
         _showStreamInfoOverlay = State(
             initialValue: model.settings.showStreamInfoOverlay ?? false
         )
@@ -76,10 +68,12 @@ struct SettingsView: View {
                 }
 
             GeometryReader { proxy in
+                let panelWidth = min(proxy.size.width, 960)
+                let panelMaxHeight = min(panelWidth * 1.5, 860)
                 settingsPanel
                     .frame(
-                        width: max(min(proxy.size.width - 40, 1120), 420),
-                        height: max(min(proxy.size.height - 40, 760), 420)
+                        width: panelWidth,
+                        height: max(min(proxy.size.height, panelMaxHeight), 420)
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
@@ -189,8 +183,6 @@ struct SettingsView: View {
             playbackSection
         case .genreDisplay:
             programDisplaySection
-        case .tiles:
-            tilesSection
         case .channels:
             channelsSection
         }
@@ -340,46 +332,6 @@ struct SettingsView: View {
         }
     }
 
-    private var tilesSection: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            sectionTitle("タイル")
-
-            LeadingSwitchRow(
-                title: "フォーカス時にラージタイルへ入れ替え",
-                detail: "ラージタイルが1枚だけの配置で有効です。",
-                isOn: $keepFocusOnSingleLargeTile
-            )
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("配置")
-                    .font(.headline)
-                Picker("配置カテゴリ", selection: $tileLayoutCategory) {
-                    ForEach(TileLayoutCategory.allCases) { category in
-                        Text(category.label).tag(category)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 420)
-
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 126, maximum: 160), spacing: 12)],
-                    alignment: .leading,
-                    spacing: 12
-                ) {
-                    ForEach(tileLayoutCategory.layouts, id: \.self) { layout in
-                        TileLayoutOptionView(
-                            layout: layout,
-                            isSelected: tileLayout.hasSameShape(as: layout)
-                        ) {
-                            tileLayout = layout
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     private var channelsSection: some View {
         VStack(alignment: .leading, spacing: 18) {
             sectionTitle("チャンネル管理")
@@ -520,7 +472,7 @@ struct SettingsView: View {
         let settings = AppSettings(
             epgStationBaseURL: epgStationBaseURL,
             volumePercent: VolumeLevel.normalized(volumePercent),
-            keepFocusOnSingleLargeTile: keepFocusOnSingleLargeTile,
+            keepFocusOnSingleLargeTile: model.settings.keepFocusOnSingleLargeTile ?? true,
             showStreamInfoOverlay: showStreamInfoOverlay,
             channelProgramOverlayVisibility: showChannelProgramOverlayAlways ? .always : .onHover,
             programGenreDisplaySettings: ProgramGenreDisplaySettings(
@@ -532,7 +484,7 @@ struct SettingsView: View {
         )
         guard model.applySettings(
             settings,
-            tileLayout: tileLayout,
+            tileLayout: model.layout,
             channelSettings: draftChannelSettings
         ) else {
             errorMessage = "保存できませんでした。"
@@ -1038,6 +990,7 @@ private struct ProgramGenrePickerRow: View {
     let indent: CGFloat
     let showsDetail: Bool
     let onAdd: () -> Void
+    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -1074,6 +1027,11 @@ private struct ProgramGenrePickerRow: View {
                 onAdd()
             } label: {
                 Image(systemName: selectionState == target.state ? "checkmark" : "plus")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 22, height: 22)
+                    .background(addButtonBackground)
+                    .foregroundStyle(addButtonForeground)
+                    .clipShape(Circle())
             }
             .buttonStyle(.plain)
             .disabled(selectionState == target.state)
@@ -1081,7 +1039,36 @@ private struct ProgramGenrePickerRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, showsDetail ? 8 : 6)
+        .background(rowBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 5))
         .contentShape(Rectangle())
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .onHover { isHovering = $0 }
+    }
+
+    private var rowBackground: Color {
+        if isHovering {
+            return Color.accentColor.opacity(0.12)
+        }
+        if indent == 0 {
+            return Color.white.opacity(0.055)
+        }
+        return Color.white.opacity(0.025)
+    }
+
+    private var addButtonBackground: Color {
+        if selectionState == target.state {
+            return Color.secondary.opacity(0.16)
+        }
+        return Color.accentColor.opacity(isHovering ? 0.26 : 0.18)
+    }
+
+    private var addButtonForeground: Color {
+        if selectionState == target.state {
+            return .secondary
+        }
+        return .accentColor
     }
 }
 
@@ -1354,6 +1341,119 @@ private struct FavoriteChannelDropDelegate: DropDelegate {
     }
 }
 
+struct TileLayoutQuickPickerPanel: View {
+    let onSelect: (TileLayoutConfig) -> Void
+    let onCancel: () -> Void
+    let onKeepFocusOnSingleLargeTileChanged: (Bool) -> Void
+    @State private var tileLayout: TileLayoutConfig
+    @State private var category: TileLayoutCategory
+    @State private var keepFocusOnSingleLargeTile: Bool
+
+    init(
+        currentLayout: TileLayoutConfig,
+        keepFocusOnSingleLargeTile: Bool,
+        onSelect: @escaping (TileLayoutConfig) -> Void,
+        onCancel: @escaping () -> Void,
+        onKeepFocusOnSingleLargeTileChanged: @escaping (Bool) -> Void
+    ) {
+        self.onSelect = onSelect
+        self.onCancel = onCancel
+        self.onKeepFocusOnSingleLargeTileChanged = onKeepFocusOnSingleLargeTileChanged
+        _tileLayout = State(initialValue: currentLayout)
+        _category = State(initialValue: TileLayoutCategory.category(for: currentLayout))
+        _keepFocusOnSingleLargeTile = State(initialValue: keepFocusOnSingleLargeTile)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Text("タイル")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                Spacer()
+                Button {
+                    onCancel()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.escape, modifiers: [])
+            }
+
+            TileLayoutSettingsContent(
+                tileLayout: $tileLayout,
+                tileLayoutCategory: $category,
+                keepFocusOnSingleLargeTile: Binding(
+                    get: { keepFocusOnSingleLargeTile },
+                    set: { newValue in
+                        keepFocusOnSingleLargeTile = newValue
+                        onKeepFocusOnSingleLargeTileChanged(newValue)
+                    }
+                )
+            ) { layout in
+                onSelect(layout)
+            }
+        }
+        .padding(20)
+        .frame(width: 900, alignment: .topLeading)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(radius: 20)
+    }
+}
+
+private struct TileLayoutSettingsContent: View {
+    @Binding var tileLayout: TileLayoutConfig
+    @Binding var tileLayoutCategory: TileLayoutCategory
+    @Binding var keepFocusOnSingleLargeTile: Bool
+    var onLayoutSelected: ((TileLayoutConfig) -> Void)?
+
+    private let columns = Array(
+        repeating: GridItem(.fixed(126), spacing: 12),
+        count: 6
+    )
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            LeadingSwitchRow(
+                title: "フォーカス時にラージタイルへ入れ替え",
+                detail: "ラージタイルが1枚だけの配置で有効です。",
+                isOn: $keepFocusOnSingleLargeTile
+            )
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("配置")
+                    .font(.headline)
+                Picker("配置カテゴリ", selection: $tileLayoutCategory) {
+                    ForEach(TileLayoutCategory.allCases) { category in
+                        Text(category.label).tag(category)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 420)
+
+                LazyVGrid(
+                    columns: columns,
+                    alignment: .leading,
+                    spacing: 12
+                ) {
+                    ForEach(tileLayoutCategory.layouts, id: \.self) { layout in
+                        TileLayoutOptionView(
+                            layout: layout,
+                            isSelected: tileLayout.hasSameShape(as: layout)
+                        ) {
+                            tileLayout = layout
+                            onLayoutSelected?(layout)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private enum TileLayoutCategory: String, CaseIterable, Identifiable {
     case uniform
     case singleLarge
@@ -1508,7 +1608,6 @@ private struct LeadingSwitchRow: View {
 private enum SettingsSection: String, CaseIterable, Identifiable {
     case general
     case playback
-    case tiles
     case channels
     case genreDisplay
 
@@ -1520,8 +1619,6 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
             return "一般"
         case .playback:
             return "再生"
-        case .tiles:
-            return "タイル"
         case .channels:
             return "チャンネル管理"
         case .genreDisplay:
@@ -1535,8 +1632,6 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
             return "gearshape"
         case .playback:
             return "play.rectangle"
-        case .tiles:
-            return "rectangle.grid.3x2"
         case .channels:
             return "list.bullet"
         case .genreDisplay:

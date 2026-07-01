@@ -20,6 +20,7 @@ final class TileGridModel {
     @ObservationIgnored var onSettingsPresentationChanged: ((Bool) -> Void)?
     @ObservationIgnored var onFocusedTitleChanged: ((String) -> Void)?
     @ObservationIgnored var onFocusedChannelSelectionRequested: (() -> Void)?
+    @ObservationIgnored var onTileLayoutPickerRequested: (() -> Void)?
     private var config: AppConfig
     private let instance: VLCInstance
     private var epgStationClient: EPGStationClient?
@@ -212,6 +213,10 @@ final class TileGridModel {
 
     func requestFocusedChannelSelection() {
         onFocusedChannelSelectionRequested?()
+    }
+
+    func requestTileLayoutPicker() {
+        onTileLayoutPickerRequested?()
     }
 
     func playChannel(_ item: ChannelSelectionItem, at index: Int, focusAfterPlay: Bool = false) {

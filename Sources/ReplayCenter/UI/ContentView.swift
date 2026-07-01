@@ -4,9 +4,12 @@ struct ContentView: View {
     @Bindable var model: TileGridModel
     @Bindable var windowChrome: WindowChromeModel
     let onChannelSelectorPresentationChanged: (Bool) -> Void
+    let onTileLayoutPickerPresentationChanged: (Bool) -> Void
+    let onFullScreenExitRequested: () -> Bool
     let onContentWindowDragChanged: () -> Void
     let onContentWindowDragEnded: () -> Void
     @State private var isChannelSelectorPresented = false
+    @State private var isTileLayoutPickerPresented = false
     @State private var channelSelectionTargetIndex: Int?
     @State private var draggingTileIndex: Int?
     @State private var dragTranslation: CGSize = .zero
@@ -47,6 +50,31 @@ struct ContentView: View {
             }
         }
         .overlay {
+            if isTileLayoutPickerPresented {
+                ZStack {
+                    Color.black.opacity(0.54)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            closeTileLayoutPicker()
+                        }
+
+                    TileLayoutQuickPickerPanel(
+                        currentLayout: model.layout,
+                        keepFocusOnSingleLargeTile: model.settings.keepFocusOnSingleLargeTile ?? true
+                    ) { layout in
+                        if model.applyTileLayout(layout) {
+                            closeTileLayoutPicker()
+                        }
+                    } onCancel: {
+                        closeTileLayoutPicker()
+                    } onKeepFocusOnSingleLargeTileChanged: { isEnabled in
+                        model.setKeepFocusOnSingleLargeTile(isEnabled)
+                    }
+                    .padding(24)
+                }
+            }
+        }
+        .overlay {
             if model.isSettingsPresented {
                 SettingsView(
                     model: model,
@@ -73,10 +101,14 @@ struct ContentView: View {
             model.onFocusedChannelSelectionRequested = {
                 openChannelSelector(for: model.focusedIndex)
             }
+            model.onTileLayoutPickerRequested = {
+                openTileLayoutPicker()
+            }
             isKeyboardFocused = true
         }
         .onDisappear {
             model.onFocusedChannelSelectionRequested = nil
+            model.onTileLayoutPickerRequested = nil
         }
     }
 
@@ -221,7 +253,12 @@ struct ContentView: View {
     ) -> some Gesture {
         DragGesture(minimumDistance: 10)
             .onChanged { value in
-                guard !isChannelSelectorPresented, !model.isSettingsPresented else { return }
+                guard !isChannelSelectorPresented,
+                      !isTileLayoutPickerPresented,
+                      !model.isSettingsPresented
+                else {
+                    return
+                }
                 if model.layout.tileCount == 1 {
                     onContentWindowDragChanged()
                     return
@@ -238,7 +275,12 @@ struct ContentView: View {
             }
             .onEnded { value in
                 defer { resetDragState() }
-                guard !isChannelSelectorPresented, !model.isSettingsPresented else { return }
+                guard !isChannelSelectorPresented,
+                      !isTileLayoutPickerPresented,
+                      !model.isSettingsPresented
+                else {
+                    return
+                }
                 if model.layout.tileCount == 1 {
                     onContentWindowDragEnded()
                     return
@@ -291,7 +333,19 @@ struct ContentView: View {
     }
 
     private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
+        if isTileLayoutPickerPresented {
+            if keyPress.key == .escape {
+                closeTileLayoutPicker()
+                return .handled
+            }
+            return .ignored
+        }
         guard !isChannelSelectorPresented, !model.isSettingsPresented else { return .ignored }
+
+        if keyPress.key == .escape {
+            return onFullScreenExitRequested() ? .handled : .ignored
+        }
+
         guard model.tiles.indices.contains(model.focusedIndex) else { return .ignored }
 
         if keyPress.key == .delete {
@@ -311,6 +365,9 @@ struct ContentView: View {
             return .handled
         case "m":
             model.toggleFocusedTileMuted()
+            return .handled
+        case "t":
+            openTileLayoutPicker()
             return .handled
         case "[":
             model.decreaseVolume()
@@ -340,6 +397,28 @@ struct ContentView: View {
         isChannelSelectorPresented = false
         channelSelectionTargetIndex = nil
         onChannelSelectorPresentationChanged(false)
+        isKeyboardFocused = false
+        Task { @MainActor in
+            await Task.yield()
+            isKeyboardFocused = true
+        }
+    }
+
+    private func openTileLayoutPicker() {
+        guard !isTileLayoutPickerPresented,
+              !isChannelSelectorPresented,
+              !model.isSettingsPresented
+        else {
+            return
+        }
+        isTileLayoutPickerPresented = true
+        onTileLayoutPickerPresentationChanged(true)
+    }
+
+    private func closeTileLayoutPicker() {
+        guard isTileLayoutPickerPresented else { return }
+        isTileLayoutPickerPresented = false
+        onTileLayoutPickerPresentationChanged(false)
         isKeyboardFocused = false
         Task { @MainActor in
             await Task.yield()

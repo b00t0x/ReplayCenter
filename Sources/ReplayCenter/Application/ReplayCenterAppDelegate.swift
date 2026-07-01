@@ -17,8 +17,9 @@ final class WindowChromeModel {
 
 @MainActor
 final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate, NSMenuItemValidation {
-    private static let settingsMinimumContentSize = CGSize(width: 1040, height: 640)
+    private static let settingsMinimumContentSize = CGSize(width: 1000, height: 640)
     private static let channelSelectorMinimumContentSize = CGSize(width: 560, height: 600)
+    private static let tileLayoutPickerMinimumContentSize = CGSize(width: 960, height: 620)
     private static let tileBasePixelSize = CGSize(width: 1920, height: 1080)
     private static let fullScreenMenuRevealBandHeight: CGFloat = 36
     private static let mouseInactivityDelay: Duration = .seconds(3)
@@ -101,6 +102,15 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
                     minimumContentSize: Self.channelSelectorMinimumContentSize
                 )
             },
+            onTileLayoutPickerPresentationChanged: { [weak self] isPresented in
+                self?.applyOverlayWindowMode(
+                    isPresented: isPresented,
+                    minimumContentSize: Self.tileLayoutPickerMinimumContentSize
+                )
+            },
+            onFullScreenExitRequested: { [weak self] in
+                self?.exitFullScreenIfNeeded() ?? false
+            },
             onContentWindowDragChanged: { [weak self] in
                 self?.moveWindowForContentDrag()
             },
@@ -132,7 +142,9 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             updateCachedWindowFrame(for: window)
         }
         tileGrid.onLayoutChanged = { [weak self] layout in
-            if self?.tileGrid?.isSettingsPresented != true {
+            if self?.overlayBaseContentSize == nil,
+               self?.tileGrid?.isSettingsPresented != true
+            {
                 self?.applyWindowLayout(layout, resize: true)
             }
             self?.saveCurrentState(fallbackLayout: layout)
@@ -529,6 +541,16 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         viewMenu.addItem(windowSizeItem)
 
         viewMenu.addItem(.separator())
+        let tileLayoutItem = NSMenuItem(
+            title: "タイル配置...",
+            action: #selector(openTileLayoutPicker(_:)),
+            keyEquivalent: "t"
+        )
+        tileLayoutItem.keyEquivalentModifierMask = []
+        tileLayoutItem.target = self
+        viewMenu.addItem(tileLayoutItem)
+
+        viewMenu.addItem(.separator())
         let fullScreenItem = NSMenuItem(
             title: "フルスクリーンにする",
             action: #selector(toggleFullScreen(_:)),
@@ -689,6 +711,8 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         case #selector(setFixedWindowScale(_:)):
             menuItem.state = fixedWindowScaleState(for: menuItem)
             return canApplyFixedWindowScale
+        case #selector(openTileLayoutPicker(_:)):
+            return canOpenTileLayoutPicker
         case #selector(toggleFullScreen(_:)):
             menuItem.title = window?.styleMask.contains(.fullScreen) == true
                 ? "フルスクリーンを解除"
@@ -748,6 +772,10 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         tileGrid?.requestFocusedChannelSelection()
     }
 
+    @objc private func openTileLayoutPicker(_ sender: Any?) {
+        tileGrid?.requestTileLayoutPicker()
+    }
+
     @objc private func selectPrimaryAudio(_ sender: Any?) {
         tileGrid?.setFocusedAudioSelection(.primary)
     }
@@ -785,6 +813,17 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
     @objc private func toggleFullScreen(_ sender: Any?) {
         window?.toggleFullScreen(sender)
+    }
+
+    private func exitFullScreenIfNeeded() -> Bool {
+        guard let window,
+              overlayBaseContentSize == nil,
+              window.styleMask.contains(.fullScreen)
+        else {
+            return false
+        }
+        window.toggleFullScreen(nil)
+        return true
     }
 
     @objc private func toggleStreamInfoOverlay(_ sender: Any?) {
@@ -942,6 +981,10 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         guard let tileGrid else { return false }
         return overlayBaseContentSize == nil
             && !tileGrid.isSettingsPresented
+    }
+
+    private var canOpenTileLayoutPicker: Bool {
+        canOpenFocusedChannelSelector
     }
 
     private var appDisplayVersion: String {
