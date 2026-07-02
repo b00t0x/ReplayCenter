@@ -58,8 +58,9 @@ development machine.
 scripts/build-app.sh
 ```
 
-The app is written to `.build/app/ReplayCenter.app` by default. The stream
-filter helper is copied into `Contents/MacOS` next to the main executable, which
+The app is written to `.build/app/ReplayCenter.app` by default. The `.app`
+bundle name intentionally does not include the app version. The stream filter
+helper is copied into `Contents/MacOS` next to the main executable, which
 matches ReplayCenter's default helper discovery path.
 
 The app version is managed in `VERSION`. `scripts/build-app.sh` uses that value
@@ -77,18 +78,18 @@ SwiftVLC/libVLC static library can trip the Apple linker when linked with
 `--arch arm64 --arch x86_64` in a single invocation. Per-architecture builds
 followed by `lipo` have been more reliable.
 
-The script ad-hoc signs the bundle by default. Use `--no-sign` when inspecting
-unsigned build output.
+The script ad-hoc signs and verifies the bundle by default. Use `--no-sign`
+when inspecting unsigned build output.
 
 ```bash
 scripts/build-app.sh --arch x86_64 --no-sign
-scripts/build-app.sh --arch universal --output .build/app/ReplayCenter-universal.app
+scripts/build-app.sh --arch universal --output .build/app/ReplayCenter.app
 ```
 
 App icons can be provided as either a traditional `.icns` file or an Icon
-Composer `.icon` document. The final repository location for icon sources is
-still undecided; for now the script automatically uses `Resources/AppIcon.icns`
-or `Resources/AppIcon.icon` when present. To pass an icon explicitly:
+Composer `.icon` document. The script automatically uses `Resources/AppIcon.icns`
+or `Resources/AppIcon.icon` when present. The committed app icon source is
+`Resources/AppIcon.icon`. To pass an icon explicitly:
 
 ```bash
 scripts/build-app.sh --icon Resources/AppIcon.icon
@@ -100,6 +101,37 @@ fallback `AppIcon.icns`. With `CFBundleIconName` present, macOS can use the
 asset catalog icon on Sequoia as well; the `.icns` is kept for tools or
 contexts that still look at the legacy icon file. This path requires Xcode or
 another toolchain that provides `actool`.
+
+To verify an existing `.app` bundle without rebuilding it:
+
+```bash
+scripts/verify-app.sh --arch x86_64 .build/app/ReplayCenter.app
+scripts/verify-app.sh --arch universal .build/app/ReplayCenter.app
+```
+
+To build a drag-and-drop DMG containing `ReplayCenter.app` and an Applications
+alias:
+
+```bash
+scripts/build-dmg.sh --arch universal
+```
+
+The `.app` inside the DMG remains `ReplayCenter.app`; the DMG filename includes
+the version and architecture, for example
+`.build/dist/ReplayCenter-0.0.1-universal.dmg`.
+
+## GitHub Actions Build
+
+`.github/workflows/build-dmg.yml` builds the DMG on GitHub Actions. It does not
+run on every `main` push.
+
+- Manual `workflow_dispatch` builds a DMG and uploads it as an Actions artifact.
+- Pushing a `v*` tag builds a release DMG, verifies that the tag version matches
+  `VERSION`, and creates a draft GitHub Release with the DMG attached.
+
+Release notes are read from `CHANGELOG.md`. For tag `v0.1.0`, the workflow uses
+the `## 0.1.0` section as the GitHub Release body, with a small fallback body if
+that section is missing.
 
 To re-test macOS local network permission prompts, build with a temporary bundle
 identifier and run that app:

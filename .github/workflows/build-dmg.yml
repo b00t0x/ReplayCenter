@@ -1,0 +1,144 @@
+name: Build DMG
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Build architecture
+        required: true
+        type: choice
+        default: universal
+        options:
+          - x86_64
+          - arm64
+          - universal
+      configuration:
+        description: SwiftPM configuration
+        required: true
+        type: choice
+        default: release
+        options:
+          - debug
+          - release
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-dmg:
+    name: Build DMG
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show tool versions
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+          xcrun --find actool
+
+      - name: Validate scripts
+        run: |
+          bash -n scripts/build-app.sh
+          bash -n scripts/build-dmg.sh
+          bash -n scripts/verify-app.sh
+
+      - name: Resolve build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            echo "Invalid VERSION: $version" >&2
+            exit 1
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            arch="${{ inputs.arch }}"
+            configuration="${{ inputs.configuration }}"
+          else
+            arch="universal"
+            configuration="release"
+          fi
+
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [[ "$tag_version" != "$version" ]]; then
+              echo "Tag version ($tag_version) does not match VERSION ($version)" >&2
+              exit 1
+            fi
+          fi
+
+          dmg_path=".build/dist/ReplayCenter-$version-$arch.dmg"
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "arch=$arch" >> "$GITHUB_OUTPUT"
+          echo "configuration=$configuration" >> "$GITHUB_OUTPUT"
+          echo "dmg_path=$dmg_path" >> "$GITHUB_OUTPUT"
+
+      - name: Build DMG
+        run: |
+          scripts/build-dmg.sh \
+            --arch "${{ steps.meta.outputs.arch }}" \
+            --configuration "${{ steps.meta.outputs.configuration }}" \
+            --output "${{ steps.meta.outputs.dmg_path }}"
+
+      - name: Show build output
+        run: |
+          ls -lh .build/dist
+          hdiutil imageinfo "${{ steps.meta.outputs.dmg_path }}"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReplayCenter-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.arch }}
+          path: ${{ steps.meta.outputs.dmg_path }}
+          if-no-files-found: error
+
+      - name: Prepare release notes
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.meta.outputs.version }}"
+          notes_file="release-notes.md"
+
+          awk -v version="$version" '
+            $0 == "## " version { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+            END { if (!found) exit 2 }
+          ' CHANGELOG.md > "$notes_file" || {
+            {
+              echo "ReplayCenter $version"
+              echo
+              echo "DMG: ReplayCenter-$version-${{ steps.meta.outputs.arch }}.dmg"
+            } > "$notes_file"
+          }
+
+          if [[ ! -s "$notes_file" ]]; then
+            {
+              echo "ReplayCenter $version"
+              echo
+              echo "DMG: ReplayCenter-$version-${{ steps.meta.outputs.arch }}.dmg"
+            } > "$notes_file"
+          fi
+
+      - name: Create draft GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "${{ steps.meta.outputs.dmg_path }}" \
+            --title "ReplayCenter ${{ steps.meta.outputs.version }}" \
+            --notes-file release-notes.md \
+            --draft

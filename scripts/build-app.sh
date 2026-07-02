@@ -321,13 +321,19 @@ PLIST
     codesign --force --sign - "$macos_dir/ReplayCenterStreamFilter"
     codesign --force --sign - "$macos_dir/ReplayCenter"
     codesign --force --sign - "$app_path"
-    codesign --verify --deep --strict "$app_path"
   fi
 
   echo "==> Built $app_path"
-  file "$macos_dir/ReplayCenter"
-  file "$macos_dir/ReplayCenterStreamFilter"
+}
+
+verify_bundle() {
+  local verify_args=("$output_path" --arch "$arch")
+  if [[ "$should_sign" -eq 0 ]]; then
+    verify_args+=(--skip-codesign)
+  fi
+  "$repo_root/scripts/verify-app.sh" "${verify_args[@]}"
 }
 
 prepare_products
 create_bundle "$output_path"
+verify_bundle
