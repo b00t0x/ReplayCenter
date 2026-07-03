@@ -48,6 +48,10 @@ swift build --product ReplayCenterStreamFilter
 swift run ReplayCenter
 ```
 
+Debug builds keep detailed playback and stream filter logs on stderr. Release
+builds suppress routine playback/filter logs while keeping errors and
+`[filter-status]` messages that the app uses internally.
+
 ## Build App Bundle
 
 Use the bundled script to create a local `.app` bundle. The default architecture

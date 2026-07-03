@@ -11,6 +11,12 @@
 
 namespace {
 
+#ifdef REPLAYCENTER_RELEASE_BUILD
+#define REPLAYCENTER_FILTER_DEBUG_LOG(...) do { } while (0)
+#else
+#define REPLAYCENTER_FILTER_DEBUG_LOG(...) std::fprintf(stderr, __VA_ARGS__)
+#endif
+
 constexpr int TS_PACKET_SIZE = 188;
 constexpr int SYNC_BYTE = 0x47;
 constexpr int PID_PAT = 0x0000;
@@ -647,7 +653,7 @@ public:
                 pmtPid_ = pmtPid;
                 pmtSection_.clear();
                 pmtSectionExpectedSize_ = 0;
-                std::fprintf(stderr, "[filter] pmt pid=0x%x\n", pmtPid_);
+                REPLAYCENTER_FILTER_DEBUG_LOG("[filter] pmt pid=0x%x\n", pmtPid_);
             }
             writeAll(out, packet, TS_PACKET_SIZE);
             return;
@@ -677,7 +683,7 @@ public:
                     }
                     aacWorkspace_.clear();
                     isDualMono_ = false;
-                    std::fprintf(stderr, "[filter] audio pids=%s selected=0x%x\n", audioPidsLabel().c_str(), audioPid_);
+                    REPLAYCENTER_FILTER_DEBUG_LOG("[filter] audio pids=%s selected=0x%x\n", audioPidsLabel().c_str(), audioPid_);
                     emitAudioStatus();
                 }
                 writeSelectedPmt(out);
@@ -770,7 +776,7 @@ private:
         aacWorkspace_.clear();
         isDualMono_ = false;
         lastMode_ = mode;
-        std::fprintf(stderr, "[filter] audio mode state reset mode=%d\n", static_cast<int>(mode));
+        REPLAYCENTER_FILTER_DEBUG_LOG("[filter] audio mode state reset mode=%d\n", static_cast<int>(mode));
     }
 
     void updateSelectedAudioPid(FILE *out)
@@ -801,7 +807,7 @@ private:
         currentPes_.clear();
         aacWorkspace_.clear();
         isDualMono_ = false;
-        std::fprintf(stderr, "[filter] selected audio pid=0x%x mode=%d\n", audioPid_, static_cast<int>(mode));
+        REPLAYCENTER_FILTER_DEBUG_LOG("[filter] selected audio pid=0x%x mode=%d\n", audioPid_, static_cast<int>(mode));
         emitAudioStatus();
         writeSelectedPmt(out);
     }
@@ -901,6 +907,13 @@ private:
         AudioMode mode
     )
     {
+#ifdef REPLAYCENTER_RELEASE_BUILD
+        (void)converted;
+        (void)inputPes;
+        (void)outputPes;
+        (void)mode;
+        return;
+#endif
         if (mode == AudioMode::Stereo) {
             return;
         }
@@ -911,8 +924,7 @@ private:
         if (converted) {
             ++convertedPesCount_;
             if (convertedPesCount_ <= 5 || convertedPesCount_ % 100 == 0) {
-                std::fprintf(
-                    stderr,
+                REPLAYCENTER_FILTER_DEBUG_LOG(
                     "[filter] converted pes mode=%d count=%zu bytes=%zu->%zu frames=%zu->%zu workspace=%zu\n",
                     static_cast<int>(mode),
                     convertedPesCount_,
@@ -926,8 +938,7 @@ private:
         } else {
             ++passthroughPesCount_;
             if (passthroughPesCount_ <= 5 || passthroughPesCount_ % 100 == 0) {
-                std::fprintf(
-                    stderr,
+                REPLAYCENTER_FILTER_DEBUG_LOG(
                     "[filter] passthrough pes mode=%d count=%zu bytes=%zu frames=%zu workspace=%zu\n",
                     static_cast<int>(mode),
                     passthroughPesCount_,
@@ -1052,8 +1063,7 @@ int main(int argc, char **argv)
     std::signal(SIGUSR2, handleSignal);
     std::signal(SIGHUP, handleSignal);
 
-    std::fprintf(
-        stderr,
+    REPLAYCENTER_FILTER_DEBUG_LOG(
         "[filter] initial mode=%d forcedAudioPid=0x%x muxSelectedToStereo=%s\n",
         static_cast<int>(mode),
         forcedAudioPid,

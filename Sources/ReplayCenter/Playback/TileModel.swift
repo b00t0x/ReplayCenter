@@ -152,7 +152,7 @@ final class TileModel: Identifiable {
             applyDeinterlaceIfNeeded()
             try player.play(media)
             playbackState = .playing
-            log("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel) volume=\(volumePercent) audioSelection=\(currentAudioSelection.rawValue) filter=\((config.streamFilter ?? .default).summary)")
+            debugLog("play url=\(stream.url) deinterlace=\(effectiveDeinterlaceLabel) volume=\(volumePercent) audioSelection=\(currentAudioSelection.rawValue) filter=\((config.streamFilter ?? .default).summary)")
         } catch {
             playbackState = .failed(error.localizedDescription)
             activePipelineID = nil
@@ -169,7 +169,7 @@ final class TileModel: Identifiable {
         case let .audioStateChanged(state):
             guard audioStreamState != state else { return }
             audioStreamState = state
-            log("audio state changed state=\(state.rawValue)")
+            debugLog("audio state changed state=\(state.rawValue)")
             if state.supportsAudioSelectionControls {
                 streamFilterPipeline?.setAudioMode(currentAudioSelection.filterAudioMode)
             }
@@ -288,5 +288,11 @@ final class TileModel: Identifiable {
     private func log(_ message: String) {
         let label = stream.map { $0.title ?? $0.url } ?? "empty tile"
         fputs("[\(label)] \(message)\n", stderr)
+    }
+
+    private func debugLog(_ message: String) {
+        #if DEBUG
+        log(message)
+        #endif
     }
 }

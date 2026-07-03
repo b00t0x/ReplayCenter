@@ -35,6 +35,7 @@ let package = Package(
                 "third_party/tsreadex/util.cpp"
             ],
             cxxSettings: [
+                .define("REPLAYCENTER_RELEASE_BUILD", .when(configuration: .release)),
                 .unsafeFlags(["-std=c++17", "-DNDEBUG"])
             ]
         )
