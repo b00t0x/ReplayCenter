@@ -21,6 +21,7 @@ final class TileGridModel {
     @ObservationIgnored var onFocusedTitleChanged: ((String) -> Void)?
     @ObservationIgnored var onFocusedChannelSelectionRequested: (() -> Void)?
     @ObservationIgnored var onTileLayoutPickerRequested: (() -> Void)?
+    private var hasAppliedFocus = false
     private var config: AppConfig
     private let instance: VLCInstance
     private var epgStationClient: EPGStationClient?
@@ -108,10 +109,10 @@ final class TileGridModel {
         notifyFocusedTitleChanged()
     }
 
-    func focus(_ index: Int) {
+    func focus(_ index: Int, forceAudioUpdate: Bool = false) {
         guard tiles.indices.contains(index) else { return }
         let targetIndex = promotedFocusIndex(for: index)
-        applyFocus(targetIndex)
+        applyFocus(targetIndex, forceAudioUpdate: forceAudioUpdate)
     }
 
     @discardableResult
@@ -121,7 +122,7 @@ final class TileGridModel {
         }
         tiles.swapAt(sourceIndex, targetIndex)
         applyPlaybackProfilesToTiles(at: [sourceIndex, targetIndex], restartPolicy: .whenModeChanges)
-        applyFocus(focusedIndex)
+        applyFocus(focusedIndex, forceAudioUpdate: true)
         return true
     }
 
@@ -130,11 +131,14 @@ final class TileGridModel {
         return layout.canSwapTilesForDrag(sourceIndex: sourceIndex, targetIndex: targetIndex)
     }
 
-    private func applyFocus(_ index: Int) {
+    private func applyFocus(_ index: Int, forceAudioUpdate: Bool = false) {
         guard tiles.indices.contains(index) else { return }
+        let shouldUpdateAudio = forceAudioUpdate || !hasAppliedFocus || focusedIndex != index
         focusedIndex = index
+        hasAppliedFocus = true
         notifyFocusedTitleChanged()
 
+        guard shouldUpdateAudio else { return }
         for (tileIndex, tile) in tiles.enumerated() {
             tile.setMuted(tileIndex != index)
         }
@@ -251,7 +255,7 @@ final class TileGridModel {
             initialVolumePercent: VolumeLevel.normalized(settings.volumePercent ?? defaultVolumePercent)
         )
         if focusAfterPlay {
-            focus(index)
+            focus(index, forceAudioUpdate: true)
         } else if index == focusedIndex {
             notifyFocusedTitleChanged()
         }
@@ -326,7 +330,7 @@ final class TileGridModel {
         guard tiles.indices.contains(index) else { return }
         tiles[index].clear()
         if index == focusedIndex {
-            focus(index)
+            focus(index, forceAudioUpdate: true)
         } else {
             applyFocus(focusedIndex)
         }
@@ -558,7 +562,7 @@ final class TileGridModel {
 
         layout = newLayout
         onLayoutChanged?(newLayout)
-        focus(focusedIndex)
+        focus(focusedIndex, forceAudioUpdate: focusFirstNewTile)
         return true
     }
 

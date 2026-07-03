@@ -109,11 +109,11 @@ struct TileView: View {
                         }
                     }
                 }
-                .contentShape(Rectangle())
-                .gesture(tileTapGesture)
                 .onHover { hovering in
                     isHovering = hovering
                 }
+                .contentShape(Rectangle())
+                .gesture(tileTapGesture)
                 .task {
                     model.startIfNeeded()
                 }
@@ -126,6 +126,7 @@ struct TileView: View {
             EmptyTilePanelBackground(isHovering: effectiveIsHovering)
         } else {
             VideoView(model.player)
+                .allowsHitTesting(false)
                 .background(Color.black)
         }
     }
