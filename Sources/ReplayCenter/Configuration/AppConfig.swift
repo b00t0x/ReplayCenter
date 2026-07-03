@@ -304,6 +304,7 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
         TileLayoutConfig(columns: 4, rows: 1),
         TileLayoutConfig(columns: 5, rows: 1),
         TileLayoutConfig(columns: 6, rows: 1),
+        TileLayoutConfig(columns: 1, rows: 2),
         TileLayoutConfig(columns: 1, rows: 3),
         TileLayoutConfig(columns: 1, rows: 4),
         TileLayoutConfig(columns: 1, rows: 5),
@@ -401,21 +402,11 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
             columns: 4,
             rows: 4,
             largeTiles: [
-                TilePlacement(x: 2, y: 0, width: 2, height: 2),
-                TilePlacement(x: 0, y: 2, width: 2, height: 2),
-                TilePlacement(x: 2, y: 2, width: 2, height: 2)
-            ],
-            label: "4x4 大3 左上小"
-        ),
-        TileLayoutConfig.large(
-            columns: 4,
-            rows: 4,
-            largeTiles: [
                 TilePlacement(x: 0, y: 0, width: 2, height: 2),
-                TilePlacement(x: 0, y: 2, width: 2, height: 2),
-                TilePlacement(x: 2, y: 2, width: 2, height: 2)
+                TilePlacement(x: 2, y: 0, width: 2, height: 2),
+                TilePlacement(x: 0, y: 2, width: 2, height: 2)
             ],
-            label: "4x4 大3 右上小"
+            label: "4x4 大3 右下小"
         ),
         TileLayoutConfig.large(
             columns: 4,
@@ -432,10 +423,20 @@ struct TileLayoutConfig: Codable, Equatable, Hashable {
             rows: 4,
             largeTiles: [
                 TilePlacement(x: 0, y: 0, width: 2, height: 2),
-                TilePlacement(x: 2, y: 0, width: 2, height: 2),
-                TilePlacement(x: 0, y: 2, width: 2, height: 2)
+                TilePlacement(x: 0, y: 2, width: 2, height: 2),
+                TilePlacement(x: 2, y: 2, width: 2, height: 2)
             ],
-            label: "4x4 大3 右下小"
+            label: "4x4 大3 右上小"
+        ),
+        TileLayoutConfig.large(
+            columns: 4,
+            rows: 4,
+            largeTiles: [
+                TilePlacement(x: 2, y: 0, width: 2, height: 2),
+                TilePlacement(x: 0, y: 2, width: 2, height: 2),
+                TilePlacement(x: 2, y: 2, width: 2, height: 2)
+            ],
+            label: "4x4 大3 左上小"
         ),
         TileLayoutConfig.large(
             columns: 4,
