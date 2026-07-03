@@ -774,7 +774,9 @@ private:
             return;
         }
         aacWorkspace_.clear();
-        isDualMono_ = false;
+        // Output mode changes do not alter the input AAC structure. Keep the
+        // last confirmed classification so the UI does not briefly disable
+        // dual-mono controls while the next frame is being reassembled.
         lastMode_ = mode;
         REPLAYCENTER_FILTER_DEBUG_LOG("[filter] audio mode state reset mode=%d\n", static_cast<int>(mode));
     }

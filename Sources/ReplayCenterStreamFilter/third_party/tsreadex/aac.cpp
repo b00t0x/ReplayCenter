@@ -507,9 +507,9 @@ void TransmuxDualMono(std::vector<uint8_t> &destLeft, std::vector<uint8_t> &dest
             break;
         }
 
-        isDualMono = false;
         if ((workspace[1] & 0xf0) != 0xf0) {
             workspace.clear();
+            isDualMono = false;
             return;
         }
 
@@ -523,6 +523,7 @@ void TransmuxDualMono(std::vector<uint8_t> &destLeft, std::vector<uint8_t> &dest
         // Frequencies other than 48/44.1/32kHz are not supported.
         if (samplingFrequencyIndex < 3 || samplingFrequencyIndex > 5) {
             SkipPayload(workspace, workspaceLenBytes);
+            isDualMono = false;
             return;
         }
         ++pos;
@@ -530,16 +531,17 @@ void TransmuxDualMono(std::vector<uint8_t> &destLeft, std::vector<uint8_t> &dest
         // ARIB STD-B32 seems to define "channel_configuration = 0 and exactly 2 SCEs" as "dual mono".
         if (channelConfiguration != 0) {
             SkipPayload(workspace, workspaceLenBytes);
+            isDualMono = false;
             return;
         }
         pos += 4;
         size_t frameLenBytes = read_bits(aac, pos, 13);
         if (frameLenBytes < 7) {
             workspace.clear();
+            isDualMono = false;
             return;
         }
 
-        isDualMono = true;
         if (workspaceLenBytes < frameLenBytes) {
             break;
         }
@@ -594,6 +596,8 @@ void TransmuxDualMono(std::vector<uint8_t> &destLeft, std::vector<uint8_t> &dest
             isDualMono = false;
             return;
         }
+
+        isDualMono = true;
 
         // Append 2 ADTS
         for (int destIndex = 0; destIndex < 2; ++destIndex) {
