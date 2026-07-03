@@ -128,10 +128,14 @@ ln -s /Applications "$dmg_root/Applications"
 mkdir -p "$(dirname "$output_path")"
 rm -f "$output_path"
 
+dmg_size_kb="$(du -sk "$dmg_root" | awk '{ print $1 }')"
+dmg_size_mb=$(( (dmg_size_kb * 125 / 100 + 65536 + 1023) / 1024 ))
+
 echo "==> Creating DMG: $output_path"
 hdiutil create \
   -volname "ReplayCenter" \
   -srcfolder "$dmg_root" \
+  -size "${dmg_size_mb}m" \
   -ov \
   -format UDZO \
   "$output_path"
