@@ -315,6 +315,6 @@ private struct ChannelOnlyTileControlsView: View {
             .padding(.horizontal, title == nil ? 2 : 5)
             .background(Color.white.opacity(0.12))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
     }
 }

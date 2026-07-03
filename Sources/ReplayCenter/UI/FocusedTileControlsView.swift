@@ -76,16 +76,23 @@ struct FocusedTileControlsView: View {
     }
 
     private func audioButton(selection: AudioSelection) -> some View {
-        Button {
+        let isEnabled = hasStream && audioStreamState.supportsAudioSelectionControls
+        return Button {
             onSetAudioSelection(selection)
         } label: {
             Text(selection.displayText)
                 .font(.caption.weight(.semibold))
                 .frame(width: 28, height: 22)
-                .background(audioSelection == selection ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.12))
+                .background(audioButtonBackground(selection: selection, isEnabled: isEnabled))
+                .foregroundStyle(isEnabled ? Color.white : Color.white.opacity(0.42))
         }
-        .buttonStyle(.plain)
-        .disabled(!hasStream || !audioStreamState.supportsAudioSelectionControls)
+        .buttonStyle(.borderless)
+        .disabled(!isEnabled)
+    }
+
+    private func audioButtonBackground(selection: AudioSelection, isEnabled: Bool) -> Color {
+        guard isEnabled else { return Color.white.opacity(0.06) }
+        return audioSelection == selection ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.12)
     }
 
     private func controlButton(title: String?, systemImage: String, action: @escaping () -> Void) -> some View {
@@ -101,7 +108,7 @@ struct FocusedTileControlsView: View {
             .padding(.horizontal, title == nil ? 2 : 5)
             .background(Color.white.opacity(0.12))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
     }
 
     private func iconButton(systemImage: String, action: @escaping () -> Void) -> some View {
@@ -110,6 +117,6 @@ struct FocusedTileControlsView: View {
                 .frame(width: 22, height: 22)
                 .background(Color.white.opacity(0.12))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
     }
 }
