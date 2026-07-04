@@ -196,19 +196,25 @@ final class TileGridModel {
         tile.setMuted(!tile.isMuted)
     }
 
-    func increaseVolume() {
-        changeFocusedTileVolume(by: VolumeLevel.step)
+    func increaseVolume(stoppingAtRepeatBoundary: Bool = false) {
+        changeFocusedTileVolume(by: VolumeLevel.step, stoppingAtRepeatBoundary: stoppingAtRepeatBoundary)
     }
 
-    func decreaseVolume() {
-        changeFocusedTileVolume(by: -VolumeLevel.step)
+    func decreaseVolume(stoppingAtRepeatBoundary: Bool = false) {
+        changeFocusedTileVolume(by: -VolumeLevel.step, stoppingAtRepeatBoundary: stoppingAtRepeatBoundary)
     }
 
-    private func changeFocusedTileVolume(by offset: Int) {
+    private func changeFocusedTileVolume(by offset: Int, stoppingAtRepeatBoundary: Bool = false) {
         guard tiles.indices.contains(focusedIndex) else { return }
         let tile = tiles[focusedIndex]
         guard tile.stream != nil else { return }
-        tile.setVolumePercent(VolumeLevel.changed(from: tile.volumePercent, by: offset))
+        tile.setVolumePercent(
+            VolumeLevel.changed(
+                from: tile.volumePercent,
+                by: offset,
+                stoppingAtRepeatBoundary: stoppingAtRepeatBoundary
+            )
+        )
     }
 
     func playFocusedChannel(_ channel: EPGStationChannel) {

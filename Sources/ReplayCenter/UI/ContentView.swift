@@ -370,10 +370,10 @@ struct ContentView: View {
             openTileLayoutPicker()
             return .handled
         case "[":
-            model.decreaseVolume()
+            model.decreaseVolume(stoppingAtRepeatBoundary: keyPress.phase.contains(.repeat))
             return .handled
         case "]":
-            model.increaseVolume()
+            model.increaseVolume(stoppingAtRepeatBoundary: keyPress.phase.contains(.repeat))
             return .handled
         default:
             return .ignored

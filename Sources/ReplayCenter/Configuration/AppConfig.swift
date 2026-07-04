@@ -239,17 +239,31 @@ struct TilePlaybackProfile: Codable, Equatable, Hashable {
 
 enum VolumeLevel {
     static let minimum = 0
-    static let maximum = 100
+    static let standard = 100
+    static let maximum = 200
     static let step = 5
+    private static let repeatStopLevels = [50, 100, 150]
 
     static func normalized(_ value: Int?) -> Int {
-        guard let value else { return maximum }
+        guard let value else { return standard }
         let clamped = min(max(value, minimum), maximum)
         return min(maximum, ((clamped + step / 2) / step) * step)
     }
 
-    static func changed(from value: Int, by delta: Int) -> Int {
-        normalized(value + delta)
+    static func changed(from value: Int, by delta: Int, stoppingAtRepeatBoundary: Bool = false) -> Int {
+        let current = normalized(value)
+        let next = normalized(current + delta)
+        guard stoppingAtRepeatBoundary, delta != 0 else { return next }
+
+        if repeatStopLevels.contains(current) {
+            return current
+        }
+
+        if delta > 0 {
+            return repeatStopLevels.first { current < $0 && next >= $0 } ?? next
+        } else {
+            return repeatStopLevels.reversed().first { current > $0 && next <= $0 } ?? next
+        }
     }
 }
 

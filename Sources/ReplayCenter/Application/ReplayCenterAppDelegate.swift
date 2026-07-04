@@ -789,11 +789,11 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     }
 
     @objc private func decreaseFocusedTileVolume(_ sender: Any?) {
-        tileGrid?.decreaseVolume()
+        tileGrid?.decreaseVolume(stoppingAtRepeatBoundary: NSApp.currentEvent?.isARepeat == true)
     }
 
     @objc private func increaseFocusedTileVolume(_ sender: Any?) {
-        tileGrid?.increaseVolume()
+        tileGrid?.increaseVolume(stoppingAtRepeatBoundary: NSApp.currentEvent?.isARepeat == true)
     }
 
     @objc private func reloadFocusedTile(_ sender: Any?) {
