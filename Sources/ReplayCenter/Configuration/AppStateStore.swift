@@ -1,17 +1,22 @@
 import Foundation
 
 struct AppState: Codable, Equatable {
+    static let currentVersion = 1
+
+    var version: Int
     var tileLayout: TileLayoutConfig
     var settings: AppSettings
     var channelSettings: ChannelSettings
     var windowFrame: WindowFrameState?
 
     init(
+        version: Int = AppState.currentVersion,
         tileLayout: TileLayoutConfig,
         settings: AppSettings = .empty,
         channelSettings: ChannelSettings = .empty,
         windowFrame: WindowFrameState? = nil
     ) {
+        self.version = version
         self.tileLayout = tileLayout
         self.settings = settings
         self.channelSettings = channelSettings
@@ -20,6 +25,15 @@ struct AppState: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedVersion = try container.decodeIfPresent(Int.self, forKey: .version) ?? 0
+        guard decodedVersion >= 0, decodedVersion <= Self.currentVersion else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .version,
+                in: container,
+                debugDescription: "Unsupported app state version: \(decodedVersion)"
+            )
+        }
+        version = Self.currentVersion
         tileLayout = try container.decode(TileLayoutConfig.self, forKey: .tileLayout)
         settings = try container.decodeIfPresent(AppSettings.self, forKey: .settings) ?? .empty
         channelSettings = try container.decodeIfPresent(
@@ -27,6 +41,14 @@ struct AppState: Codable, Equatable {
             forKey: .channelSettings
         ) ?? .empty
         windowFrame = try container.decodeIfPresent(WindowFrameState.self, forKey: .windowFrame)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case tileLayout
+        case settings
+        case channelSettings
+        case windowFrame
     }
 }
 

@@ -35,6 +35,9 @@ Codex 向け開発ルールである。
 - 実再生でしか検証できない部分が多いため、テストはデグレ防止と開発速度維持を目的に絞る。
 - 再生ライブラリは SwiftVLC を採用済み。stream 前処理は同梱の
   `ReplayCenterStreamFilter` で扱う。
+- `app-state.json` の永続フォーマットに非互換変更を入れる場合は、
+  `AppState.currentVersion` をインクリメントし、必要な migration 方針を
+  `DEVELOPMENT.md` に残す。
 
 ## 公開前提の注意
 

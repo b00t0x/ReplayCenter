@@ -164,6 +164,18 @@ Runtime state file の場所を変える場合:
 REPLAYCENTER_STATE_PATH=/tmp/replaycenter-state.json swift run ReplayCenter
 ```
 
+### Runtime state version
+
+`app-state.json` は top-level `version` を持ちます。
+現在の runtime state schema version は `1` です。
+
+- `version` が無い state file は pre-versioned format として `0` 扱いで読み込みます。
+- 読み込めた state はアプリ内では現行 version として扱い、次回保存時に
+  `version: 1` を書き出します。
+- `app-state.json` に非互換な format change を入れる場合は
+  `AppState.currentVersion` をインクリメントし、この節に migration 方針を追記します。
+- アプリが知らない future version は読み込まず、state load failure として扱います。
+
 ## EPGStation 再生プロファイル
 
 EPGStation channel selection では、再生 profile は tile size ごとに適用します。
