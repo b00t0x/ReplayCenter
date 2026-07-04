@@ -1,304 +1,120 @@
 # ReplayCenter
 
-ReplayCenter is a desktop-oriented live TV viewing application for EPGStation.
+ReplayCenter は、EPGStation のライブ TV ストリームを macOS 上でタイル表示する視聴アプリです。
 
-The first implementation target is a macOS app using SwiftVLC. Live streams are
-fed through the bundled stream filter helper before reaching SwiftVLC, so the
-same playback path is used for normal stereo, dual-mono, and multi-stream audio
-programs. The current vertical slice can load a JSON config, display live
-streams as tiles, play audio only from the focused tile, and switch dual-mono or
-multi-stream audio between primary and secondary audio. It also contains the
-first EPGStation API client layer for channel selection.
+例えばプロ野球中継の全試合など、複数チャンネルを同時に眺めながら、注目するタイルだけを大きくしたり、音声を切り替えながら視聴する用途を想定しています。
 
-Current keyboard and mouse controls:
+![ReplayCenter のメイン画面](docs/screenshots/main-window.jpg)
 
-- Click a tile to focus it.
-- Drag a tile onto another tile of the same size to swap them.
-- Press `C` to choose a channel for the focused tile.
-- Double-click a tile, or use its hover `選局` button, to choose a channel for
-  that tile without moving focus first.
-- Press `Delete` to clear the focused tile.
-- Press `M` to mute or unmute the focused tile.
-- Press `[` or `]` to change the focused tile volume in 5% steps.
-- Use the focused tile's hover controls to switch audio, reload, mute, clear, or
-  adjust volume.
-- Use the focused tile's hover reload button to reconnect the live stream when
-  the input clock suggests the stream has fallen behind.
-- Use the macOS `再生` menu for the same commands exposed by the focused tile
-  control panel.
-- Use the macOS `表示` menu for global viewing commands: fixed window sizes
-  based on physical pixels, full screen, and the input clock overlay toggle.
+## 主な機能
 
-## Requirements
+- EPGStation ライブストリーミングのチャンネルを選局して視聴
+- 複数のチャンネルをタイル状に並べて同時視聴
+- 1枚表示から最大9枚表示までのタイル配置切り替え
+- 横長、縦長、均等配置、2倍サイズのラージタイルを含む大小タイル配置
+- タイルのドラッグ入れ替え
+- フォーカスしたタイルだけ音声を再生
+- タイルごとの音量調整
+- デュアルモノラル、2 ストリーム音声の主/副切り替え
+- ラージタイル / スモールタイル別の EPGStation トランスコード設定またはインタレ解除設定
+- お気に入り・非表示チャンネル管理、チャンネルロゴ表示
+- 番組ジャンルによる強調表示 / 弱表示
 
-- macOS 15+
-- Swift 6.3+
-- Xcode command line tools
+## 名前の由来
 
-SwiftVLC requires Swift 6.3+. On development machines where the matching Xcode
-cannot be installed, use the Swift.org macOS toolchain from
-https://www.swift.org/install/macos/. In the current development environment,
-`~/.swiftly/bin/swift` is the Swift 6.3 toolchain while `/usr/bin/swift` may
-still point at Xcode's older Swift.
+ReplayCenter という名前は、NPB のリプレー検証設備である「[リプレーセンター](https://www.nikkansports.com/baseball/news/202603240000436.html)」に由来します。リプレーセンターの「モニターを6枚並べて試合映像を見ている」写真に着想を受けたもので、名前に反して巻き戻し機能があったりするわけではありません。
 
-## Run
+## 動作環境
 
-```bash
-swift build --product ReplayCenterStreamFilter
-swift run ReplayCenter
-```
+- macOS 15 Sequoia 以降（Intel / Apple Silicon 両対応）
+- EPGStation
 
-Debug builds keep detailed playback and stream filter logs on stderr. Release
-builds suppress routine playback/filter logs while keeping errors and
-`[filter-status]` messages that the app uses internally.
+ReplayCenter は Mirakurun を直接操作するのではなく、EPGStation API を利用しています。
+初回起動時に EPGStation URL を設定すると、以後の設定はアプリ側に保存されます。
 
-## Build App Bundle
+## インストール
 
-Use the bundled script to create a local `.app` bundle. The default architecture
-is `x86_64` so local packaging checks stay reasonably fast on the current
-development machine.
+1. [GitHub Releases](https://github.com/b00t0x/ReplayCenter/releases) から
+   `ReplayCenter-<version>-universal.dmg` をダウンロードします。
+2. dmg を開き、`ReplayCenter.app` を `Applications` にドラッグします。
+3. `ReplayCenter.app` を起動します。
 
-```bash
-scripts/build-app.sh
-```
+現在の配布ビルドは Apple の公証を取得していません。
+macOS にブロックされた場合は、システム設定の「プライバシーとセキュリティ」から許可して開いてください。
 
-The app is written to `.build/app/ReplayCenter.app` by default. The `.app`
-bundle name intentionally does not include the app version. The stream filter
-helper is copied into `Contents/MacOS` next to the main executable, which
-matches ReplayCenter's default helper discovery path.
-
-The app version is managed in `VERSION`. `scripts/build-app.sh` uses that value
-for both `CFBundleShortVersionString` and `CFBundleVersion`.
-
-To build a universal local bundle, build each architecture separately and merge
-the executables with `lipo`:
-
-```bash
-scripts/build-app.sh --arch universal
-```
-
-SwiftPM's one-shot universal build is intentionally avoided because the current
-SwiftVLC/libVLC static library can trip the Apple linker when linked with
-`--arch arm64 --arch x86_64` in a single invocation. Per-architecture builds
-followed by `lipo` have been more reliable.
-
-The script ad-hoc signs and verifies the bundle by default. Use `--no-sign`
-when inspecting unsigned build output.
-
-```bash
-scripts/build-app.sh --arch x86_64 --no-sign
-scripts/build-app.sh --arch universal --output .build/app/ReplayCenter.app
-```
-
-App icons can be provided as either a traditional `.icns` file or an Icon
-Composer `.icon` document. The script automatically uses `Resources/AppIcon.icns`
-or `Resources/AppIcon.icon` when present. The committed app icon source is
-`Resources/AppIcon.icon`. To pass an icon explicitly:
-
-```bash
-scripts/build-app.sh --icon Resources/AppIcon.icon
-```
-
-When a `.icon` document is used, the script compiles it with Xcode's `actool`.
-This writes both `Assets.car` for modern Icon Composer appearances and a
-fallback `AppIcon.icns`. With `CFBundleIconName` present, macOS can use the
-asset catalog icon on Sequoia as well; the `.icns` is kept for tools or
-contexts that still look at the legacy icon file. This path requires Xcode or
-another toolchain that provides `actool`.
-
-To verify an existing `.app` bundle without rebuilding it:
-
-```bash
-scripts/verify-app.sh --arch x86_64 .build/app/ReplayCenter.app
-scripts/verify-app.sh --arch universal .build/app/ReplayCenter.app
-```
-
-To build a drag-and-drop DMG containing `ReplayCenter.app` and an Applications
-alias:
-
-```bash
-scripts/build-dmg.sh --arch universal
-```
-
-The `.app` inside the DMG remains `ReplayCenter.app`; the DMG filename includes
-the version and architecture, for example
-`.build/dist/ReplayCenter-0.0.1-universal.dmg`.
-
-## GitHub Actions Build
-
-`.github/workflows/build-dmg.yml` builds the DMG on GitHub Actions. It does not
-run on every `main` push.
-
-- Manual `workflow_dispatch` builds a DMG and uploads it as an Actions artifact.
-- Pushing a `v*` tag builds a release DMG, verifies that the tag version matches
-  `VERSION`, and creates a draft GitHub Release with the DMG attached.
-
-Release notes are read from `CHANGELOG.md`. For tag `v0.1.0`, the workflow uses
-the `## 0.1.0` section as the GitHub Release body, with a small fallback body if
-that section is missing.
-
-To re-test macOS local network permission prompts, build with a temporary bundle
-identifier and run that app:
-
-```bash
-scripts/build-app.sh --bundle-id org.b00t0x.ReplayCenter.LocalNetworkTest
-```
-
-ReplayCenter is not notarized at this stage. If macOS blocks a downloaded build,
-remove quarantine from the installed app:
+コマンドで quarantine を外す場合は、内容を理解した上で次を実行します。
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/ReplayCenter.app
 ```
 
-During local development, reset ReplayCenter's privacy approvals with:
+## 初期設定
 
-```bash
-tccutil reset All org.b00t0x.ReplayCenter
-```
+初回起動時、または EPGStation URL に接続できない場合は、設定画面が自動で開きます。
 
-On the current development environment, `tccutil reset LocalNetwork ...` does
-not reset the local network approval entry, so use `All` or a temporary bundle
-identifier for first-run permission testing.
+1. EPGStation URL を入力します。
+   例: `http://epgstation.local:8888`
+2. 保存します。
+3. API への疎通チェックに成功すると、設定画面を閉じられるようになります。
 
-## Config
+macOS のローカルネットワーク許可ダイアログが出た場合は許可してください。
+許可直後にチャンネル一覧が空に見える場合は、選局画面の更新ボタンを押すか、アプリを再起動してください。
 
-ReplayCenter can start without a JSON config. Configure the EPGStation URL from
-the in-app settings screen; runtime settings are saved in the user's Application
-Support directory.
+## 基本操作
 
-`--config` and `REPLAYCENTER_CONFIG` remain as explicit debug inputs. When one
-is provided, the JSON config for that launch is used instead of saved runtime
-settings. `config.local.json` is no longer loaded implicitly. Real EPGStation
-hosts, channel IDs, tokens, and other private values should stay out of
-committed files.
+![選局画面](docs/screenshots/channel-selector.jpg)
 
-`config.example.json` is a representative debug config rather than a minimal
-normal-use config. For normal app use, set the EPGStation URL from the settings
-screen and let ReplayCenter manage runtime state. Use JSON config when you want
-to launch with fixed debug inputs and ignore saved runtime settings for that
-launch.
+- タイルをクリック: フォーカス
+- タイルをダブルクリック: 選局
+- `C`: フォーカスタイルで選局
+- `T`: タイル配置を変更
+- `Delete`: フォーカスタイルを閉じる
+- `M`: ミュート切り替え
+- `[` / `]`: 音量を 5% 刻みで下げる / 上げる
+- `Esc`: フルスクリーン解除
+- タイルをドラッグ: 他タイルと入れ替え。1枚表示ではウィンドウ移動
 
-Representative debug config keys:
+マウスをウィンドウ上に置くと、操作パネルやタイトルバーが表示されます。
+しばらく操作しないと、パネルとカーソルは自動的に隠れます。
 
-- `epgStationBaseURL`: EPGStation host URL used by channel selection.
-- `streams`: fixed startup streams for direct URL playback tests. Leave empty
-  for normal EPGStation channel selection.
-- `tileLayout`: optional fixed tile grid for a debug launch, for example
-  `{ "columns": 3, "rows": 2 }`, or explicit `placements` for non-uniform
-  layouts.
-- `liveStreamContainer`, `largeTilePlayback`, and `smallTilePlayback`: playback
-  defaults used before runtime settings are saved.
-- `streams[].deinterlace`: per-stream deinterlace mode for fixed URL playback
-  tests.
-- `networkCachingMs`, `vlcArguments`, and `mediaOptions`: low-level playback
-  experiments.
-- `volumePercent` and `keepFocusOnSingleLargeTile`: startup behavior overrides
-  for reproducible debug launches.
-- `streams[].audioMode`: initial audio selection override for fixed debug
-  streams. Use `left` for primary audio or `right` for secondary audio.
-- `streamFilter.filterPath`: custom helper executable path. Usually this can
-  stay unset because ReplayCenter looks for `ReplayCenterStreamFilter` next to
-  the app binary or in `.build/debug` / `.build/release`. The
-  `REPLAYCENTER_STREAM_FILTER_PATH` environment variable can also override it.
+## タイル配置
 
-For EPGStation channel selection, playback profiles are applied by tile size.
-Mode names are loaded from EPGStation's `/api/config` `streamConfig` response.
-When `isUnconverted` is `true`, ReplayCenter treats the stream as
-raw/interlaced input and applies the selected deinterlace mode. Otherwise it
-treats the stream as transcoded/progressive input and forces deinterlace off.
-Already selected EPGStation channels are restarted only when the effective
-playback pipeline changes. Fixed URL streams from config remain URL-driven.
+![タイル配置画面](docs/screenshots/tile-layout.jpg)
 
-ReplayCenter reads the EPGStation live TS stream inside the app and writes it
-to the helper stdin directly.
+`T` キーでタイル配置選択画面を開き、表示したいレイアウトを選ぶとすぐに反映されます。
+均等配置だけでなく、1枚を大きくした配置や、横長・縦長の配置も選べます。
 
-Initial local validation of the filter-only playback path:
+ラージタイルが1枚のレイアウトでは、フォーカスしたタイルをラージタイルへ自動的に入れ替える設定も使えます。
 
-- Primary/secondary switching works for dual-mono programs.
-- Ordinary stereo programs also play without immediately visible AV drift.
-- 9 simultaneous streams appear stable in the current development environment.
-- All filter helper processes together stayed within roughly 1% CPU usage.
-- App CPU usage stayed around the previous SwiftVLC baseline.
-- Stopping playback or clearing tiles also removed the corresponding helper
-  processes, so no lingering helpers were observed.
+## 設定
 
-Runtime state, such as the last tile layout, is saved outside the config file in
-the user's Application Support directory. Set `REPLAYCENTER_STATE_PATH` during
-development to override the state file location.
+設定画面では、主に次を変更できます。
 
-`tileLayout` also accepts explicit cell placements for non-uniform layouts. Each
-placement is expressed in 16:9 logical cells, and all cells must be covered
-without overlap:
+- EPGStation URL
+- チャンネル管理
+- ラージタイル / スモールタイル別の再生設定
+- 音量初期値
+- チャンネル情報やストリーム情報の表示
+- 強調表示 / 弱表示する番組ジャンル
 
-```json
-{
-  "columns": 3,
-  "rows": 3,
-  "label": "3x3 large top-left",
-  "placements": [
-    { "x": 0, "y": 0, "width": 2, "height": 2 },
-    { "x": 2, "y": 0, "width": 1, "height": 1 },
-    { "x": 2, "y": 1, "width": 1, "height": 1 },
-    { "x": 0, "y": 2, "width": 1, "height": 1 },
-    { "x": 1, "y": 2, "width": 1, "height": 1 },
-    { "x": 2, "y": 2, "width": 1, "height": 1 }
-  ]
-}
-```
+## 注意事項
 
-## Development Notes
+- 録画番組再生や録画予約など、EPGStation の録画に関する操作は対象外です。
+- 4K 放送は選局対象外です。
+- 字幕 / データ放送の表示には対応していません。
+- 配布ビルドは ad-hoc 署名で、Apple の公証は取得していません。
+- EPGStation 側のライブストリーミング設定やトランスコード設定により、画質、遅延、負荷は変わります。
+- トランスコードありではサーバー側にエンコード負荷、トランスコードなしではクライアント側にインタレ解除負荷がかかります。
+- 同時視聴できるタイル数は、EPGStation サーバーと Mac の性能、ネットワーク、再生設定に依存します。
 
-ReplayCenter is still in a vertical-slice phase. The current goal is to keep the
-core playback path observable and easy to adjust before polishing the final
-operation model or public documentation.
+## クレジット
 
-Playback flow:
+ReplayCenter は次のライブラリ / ソースコードを利用しています。
 
-```text
-EPGStation live stream
-  -> app-internal HTTP stream reader
-  -> ReplayCenterStreamFilter
-  -> SwiftVLC Media(fileDescriptor:)
-  -> focused-tile audio / tiled video
-```
+- [SwiftVLC](https://github.com/harflabs/SwiftVLC) : libVLC を Swift から利用するために使用
+- [tsreadex](https://github.com/xtne6f/tsreadex) : AAC / TS 処理の一部ソースコードを利用。
 
-The app intentionally routes every tile through `ReplayCenterStreamFilter`. The
-filter has been light enough in local validation, and using one playback path
-avoids reconnecting streams when a program changes between stereo and dual-mono
-audio.
+## 開発者向け情報
 
-The filter also detects multiple AAC audio streams. For multi-stream programs it
-rewrites PMT output and drops non-selected audio packets so SwiftVLC sees only
-the selected audio stream. This keeps dual-mono and multi-stream switching on
-the same primary/secondary UI path.
-
-The filter also observes TDT/TOT clock tables when they are present in the TS
-and emits clock status lines to ReplayCenter. The tile hover overlay can show
-the difference between that input stream clock and the current Mac clock.
-This is an input-side clock check, not a measurement of VLC's internal playback
-buffer. Transcoded streams or backend configurations that drop TDT/TOT will
-show the clock as unavailable.
-
-Tile playback state is intentionally minimal:
-
-- `idle`: no stream assigned
-- `starting`: stream launch is in progress, often too brief to see on screen
-- `playing`: normal state, no visible badge
-- `failed`: visible `再生失敗` badge on the tile, with details in stderr
-
-The pipeline logs stream and helper exits with the tile label. If playback
-fails, check the terminal output for `stream input ended`,
-`stream filter exited`, or
-`playback failed`.
-
-The focused tile controls currently show audio stream detection state for
-development validation. Treat this as temporary diagnostics. In a polished UI,
-stream details should move to a separate optional display such as a "show stream
-information" setting, rather than living in the main operation controls.
-
-Current development TODOs:
-
-- Decide the final tile operation UI before polishing shortcuts and overlays.
-- Keep the on-tile state display quiet during normal playback; show only
-  actionable failures unless debugging needs more detail.
+ビルド、dmg 作成、GitHub Actions、デバッグ設定、stream filter の詳細は
+[DEVELOPMENT.md](DEVELOPMENT.md) を参照してください。

@@ -2,8 +2,6 @@
   "fill" : "automatic",
   "groups" : [
     {
-      "blur-material" : null,
-      "hidden" : false,
       "layers" : [
         {
           "fill-specializations" : [
@@ -19,27 +17,15 @@
               }
             }
           ],
-          "hidden" : false,
-          "image-name" : "r-r15.svg",
-          "name" : "r-r15",
-          "opacity-specializations" : [
-            {
-              "value" : 0.9
-            },
-            {
-              "appearance" : "tinted",
-              "value" : 1
-            }
-          ]
+          "image-name" : "replay-mark-r.svg",
+          "name" : "replay-mark-r",
+          "opacity" : 0.9
         }
       ],
-      "lighting" : "individual",
-      "opacity" : 1,
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
       },
-      "specular" : true,
       "translucency" : {
         "enabled" : true,
         "value" : 0.5
@@ -61,15 +47,15 @@
               }
             }
           ],
-          "image-name" : "r-arrow.svg",
-          "name" : "r-arrow"
+          "hidden" : false,
+          "image-name" : "replay-mark-c60.svg",
+          "name" : "replay-mark-c60"
         }
       ],
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
       },
-      "specular" : true,
       "translucency" : {
         "enabled" : true,
         "value" : 0.5
