@@ -44,6 +44,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
     private var shuttingDown = false
     private var shutdownComplete = false
     private var overlayBaseContentSize: CGSize?
+    private var overlayBaseLayout: TileLayoutConfig?
     private var overlayRemovedResizable = false
     private var lastMeasuredTitlebarHeight: CGFloat = 0
     private var lastWindowedFrame: WindowFrameState?
@@ -137,15 +138,15 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         }
         applyWindowLayout(tileGrid.layout, to: window, resize: false)
         if let windowFrame = restoredState?.windowFrame {
-            applyRestoredWindowFrame(windowFrame, to: window)
+            applyRestoredWindowFrame(windowFrame, fitting: tileGrid.layout, to: window)
         } else {
             updateCachedWindowFrame(for: window)
         }
-        tileGrid.onLayoutChanged = { [weak self] layout in
+        tileGrid.onLayoutChanged = { [weak self] oldLayout, layout in
             if self?.overlayBaseContentSize == nil,
                self?.tileGrid?.isSettingsPresented != true
             {
-                self?.applyWindowLayout(layout, resize: true)
+                self?.applyWindowLayout(layout, resize: true, preservingTileSizeFrom: oldLayout)
             }
             self?.saveCurrentState(fallbackLayout: layout)
         }
@@ -892,9 +893,18 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         }
     }
 
-    private func applyWindowLayout(_ layout: TileLayoutConfig, resize: Bool) {
+    private func applyWindowLayout(
+        _ layout: TileLayoutConfig,
+        resize: Bool,
+        preservingTileSizeFrom previousLayout: TileLayoutConfig? = nil
+    ) {
         guard let window else { return }
-        applyWindowLayout(layout, to: window, resize: resize)
+        applyWindowLayout(
+            layout,
+            to: window,
+            resize: resize,
+            preservingTileSizeFrom: previousLayout
+        )
     }
 
     private func applyOverlayWindowMode(isPresented: Bool, minimumContentSize: CGSize) {
@@ -903,14 +913,15 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             mouseInactivityTask?.cancel()
             mouseInactivityTask = nil
             if overlayBaseContentSize == nil {
-                overlayBaseContentSize = window.contentLayoutRect.size
+                overlayBaseContentSize = window.contentView?.bounds.size ?? window.contentLayoutRect.size
+                overlayBaseLayout = tileGrid.layout
             }
             disableWindowResizeDuringOverlay(window)
             window.contentAspectRatio = .zero
             window.contentMinSize = minimumContentSize
             guard !window.styleMask.contains(.fullScreen) else { return }
 
-            let currentSize = window.contentLayoutRect.size
+            let currentSize = window.contentView?.bounds.size ?? window.contentLayoutRect.size
             let targetSize = CGSize(
                 width: max(currentSize.width, minimumContentSize.width),
                 height: max(currentSize.height, minimumContentSize.height)
@@ -920,13 +931,26 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             }
         } else {
             let restoreSize = overlayBaseContentSize
+            let restoreLayout = overlayBaseLayout
             overlayBaseContentSize = nil
+            overlayBaseLayout = nil
             restoreWindowResizeAfterOverlay(window)
             applyWindowLayout(tileGrid.layout, resize: false)
             updateWindowHoverState(for: window)
             guard !window.styleMask.contains(.fullScreen) else { return }
             if let restoreSize {
-                window.setContentSize(contentSize(restoreSize, fitting: tileGrid.layout))
+                let targetContentSize: CGSize
+                if let restoreLayout {
+                    targetContentSize = contentSize(
+                        restoreSize,
+                        preservingTileSizeFrom: restoreLayout,
+                        fitting: tileGrid.layout,
+                        in: window
+                    )
+                } else {
+                    targetContentSize = contentSize(restoreSize, fitting: tileGrid.layout)
+                }
+                setContentSizePreservingTopLeft(targetContentSize, for: window)
             } else {
                 applyWindowLayout(tileGrid.layout, resize: true)
             }
@@ -956,6 +980,45 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         let width = max(sourceSize.width, minimumSize.width)
         let height = max(width / aspect, minimumSize.height)
         return CGSize(width: max(height * aspect, minimumSize.width), height: height)
+    }
+
+    private func contentSize(
+        _ sourceSize: CGSize,
+        preservingTileSizeFrom sourceLayout: TileLayoutConfig,
+        fitting targetLayout: TileLayoutConfig,
+        in window: NSWindow
+    ) -> CGSize {
+        let cellScale = min(
+            sourceSize.width / CGFloat(sourceLayout.columns * 16),
+            sourceSize.height / CGFloat(sourceLayout.rows * 9)
+        )
+        guard cellScale.isFinite, cellScale > 0 else {
+            return contentSize(sourceSize, fitting: targetLayout)
+        }
+
+        let minimumSize = targetLayout.minimumWindowSize
+        var targetSize = CGSize(
+            width: max(CGFloat(targetLayout.columns * 16) * cellScale, minimumSize.width),
+            height: max(CGFloat(targetLayout.rows * 9) * cellScale, minimumSize.height)
+        )
+
+        guard let screen = window.screen ?? NSScreen.main else { return targetSize }
+        let targetFrameSize = window.frameRect(
+            forContentRect: NSRect(origin: .zero, size: targetSize)
+        ).size
+        let visibleSize = screen.visibleFrame.size
+        let shrinkScale = min(
+            visibleSize.width / targetFrameSize.width,
+            visibleSize.height / targetFrameSize.height,
+            1
+        )
+        if shrinkScale.isFinite, shrinkScale > 0, shrinkScale < 1 {
+            targetSize = CGSize(
+                width: max(targetSize.width * shrinkScale, minimumSize.width),
+                height: max(targetSize.height * shrinkScale, minimumSize.height)
+            )
+        }
+        return targetSize
     }
 
     private var canApplyFixedWindowScale: Bool {
@@ -1129,7 +1192,30 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         return constrained
     }
 
-    private func applyRestoredWindowFrame(_ windowFrame: WindowFrameState, to window: NSWindow) {
+    private func setContentSizePreservingTopLeft(_ contentSize: CGSize, for window: NSWindow) {
+        let targetFrameSize = window.frameRect(
+            forContentRect: NSRect(origin: .zero, size: contentSize)
+        ).size
+        let currentFrame = window.frame
+        let targetFrame = NSRect(
+            x: currentFrame.minX,
+            y: currentFrame.maxY - targetFrameSize.height,
+            width: targetFrameSize.width,
+            height: targetFrameSize.height
+        )
+        let screen = screen(for: targetFrame) ?? window.screen ?? NSScreen.main
+        window.setFrame(
+            constrainedWindowFrame(targetFrame, on: screen),
+            display: true,
+            animate: false
+        )
+    }
+
+    private func applyRestoredWindowFrame(
+        _ windowFrame: WindowFrameState,
+        fitting layout: TileLayoutConfig,
+        to window: NSWindow
+    ) {
         let restoredFrame = NSRect(
             x: windowFrame.x,
             y: windowFrame.y,
@@ -1142,11 +1228,39 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         }
         let screen = screen(for: restoredFrame) ?? window.screen ?? NSScreen.main
         window.setFrame(
-            constrainedWindowFrame(restoredFrame, on: screen),
+            constrainedWindowFrame(
+                adjustedWindowFrame(restoredFrame, fitting: layout, for: window),
+                on: screen
+            ),
             display: false,
             animate: false
         )
         updateCachedWindowFrame(for: window)
+    }
+
+    private func adjustedWindowFrame(
+        _ sourceFrame: NSRect,
+        preservingTileSizeFrom sourceLayout: TileLayoutConfig? = nil,
+        fitting layout: TileLayoutConfig,
+        for window: NSWindow
+    ) -> NSRect {
+        let sourceContentRect = window.contentRect(forFrameRect: sourceFrame)
+        let adjustedContentSize: CGSize
+        if let sourceLayout {
+            adjustedContentSize = contentSize(
+                sourceContentRect.size,
+                preservingTileSizeFrom: sourceLayout,
+                fitting: layout,
+                in: window
+            )
+        } else {
+            adjustedContentSize = contentSize(sourceContentRect.size, fitting: layout)
+        }
+        let adjustedContentRect = NSRect(origin: sourceContentRect.origin, size: adjustedContentSize)
+        var adjustedFrame = window.frameRect(forContentRect: adjustedContentRect)
+        adjustedFrame.origin.x = sourceFrame.origin.x
+        adjustedFrame.origin.y = sourceFrame.maxY - adjustedFrame.height
+        return adjustedFrame
     }
 
     private func screen(for frame: NSRect) -> NSScreen? {
@@ -1171,10 +1285,16 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
     private func currentWindowFrameForSaving() -> WindowFrameState? {
         guard let window,
-              !window.styleMask.contains(.fullScreen),
               overlayBaseContentSize == nil
         else {
             return lastWindowedFrame
+        }
+        if window.styleMask.contains(.fullScreen) {
+            guard let lastWindowedFrame, let tileGrid else { return lastWindowedFrame }
+            let adjustedFrame = adjustedWindowFrame(lastWindowedFrame.rect, fitting: tileGrid.layout, for: window)
+            let frame = WindowFrameState(rect: adjustedFrame)
+            self.lastWindowedFrame = frame
+            return frame
         }
         let frame = WindowFrameState(rect: window.frame)
         lastWindowedFrame = frame
@@ -1185,16 +1305,45 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         fixedWindowScales.first { $0.percent == percent }
     }
 
-    private func applyWindowLayout(_ layout: TileLayoutConfig, to window: NSWindow, resize: Bool) {
+    private func applyWindowLayout(
+        _ layout: TileLayoutConfig,
+        to window: NSWindow,
+        resize: Bool,
+        preservingTileSizeFrom previousLayout: TileLayoutConfig? = nil
+    ) {
+        let sourceFrame = window.frame
         window.contentAspectRatio = layout.gridAspectRatio
         window.contentMinSize = layout.minimumWindowSize
-        guard resize, !window.styleMask.contains(.fullScreen) else { return }
+        guard resize else { return }
 
-        let currentSize = window.contentLayoutRect.size
-        let aspect = layout.gridAspectRatio.width / layout.gridAspectRatio.height
-        let targetWidth = max(currentSize.width, layout.minimumWindowSize.width)
-        let targetHeight = max(targetWidth / aspect, layout.minimumWindowSize.height)
-        window.setContentSize(CGSize(width: targetWidth, height: targetHeight))
+        if window.styleMask.contains(.fullScreen) {
+            if let previousLayout, let lastWindowedFrame {
+                self.lastWindowedFrame = WindowFrameState(rect: adjustedWindowFrame(
+                    lastWindowedFrame.rect,
+                    preservingTileSizeFrom: previousLayout,
+                    fitting: layout,
+                    for: window
+                ))
+            }
+            return
+        }
+
+        let targetFrame: NSRect
+        if let previousLayout {
+            targetFrame = adjustedWindowFrame(
+                sourceFrame,
+                preservingTileSizeFrom: previousLayout,
+                fitting: layout,
+                for: window
+            )
+        } else {
+            targetFrame = adjustedWindowFrame(sourceFrame, fitting: layout, for: window)
+        }
+        window.setFrame(
+            constrainedWindowFrame(targetFrame, on: window.screen ?? NSScreen.main),
+            display: true,
+            animate: false
+        )
         updateCachedWindowFrame(for: window)
     }
 }

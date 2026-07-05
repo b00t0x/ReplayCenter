@@ -15,7 +15,7 @@ final class TileGridModel {
     var defaultVolumePercent: Int
     var isSettingsPresented = false
     var isEPGStationSetupRequired = false
-    @ObservationIgnored var onLayoutChanged: ((TileLayoutConfig) -> Void)?
+    @ObservationIgnored var onLayoutChanged: ((_ oldLayout: TileLayoutConfig, _ newLayout: TileLayoutConfig) -> Void)?
     @ObservationIgnored var onSettingsChanged: ((AppSettings) -> Void)?
     @ObservationIgnored var onSettingsPresentationChanged: ((Bool) -> Void)?
     @ObservationIgnored var onFocusedTitleChanged: ((String) -> Void)?
@@ -566,8 +566,9 @@ final class TileGridModel {
             }
         }
 
+        let oldLayout = layout
         layout = newLayout
-        onLayoutChanged?(newLayout)
+        onLayoutChanged?(oldLayout, newLayout)
         focus(focusedIndex, forceAudioUpdate: focusFirstNewTile)
         return true
     }
