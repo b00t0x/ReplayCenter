@@ -21,11 +21,8 @@ Codex 向け開発ルールである。
 ## ビルド環境
 
 - SwiftVLC が Swift 6.3+ を要求するため、Swift Package の tools version は 6.3 とする。
-- 現開発環境の macOS Sequoia には Swift 6.3 同梱 Xcode をインストールできないため、
-  Xcode は現状維持し、Swift 6.3 は https://www.swift.org/install/macos/ から導入した
-  Swift.org ツールチェインを使う。
-- 通常の `/usr/bin/swift` は Xcode 側の Swift を指す可能性がある。ビルド確認では
-  `~/.swiftly/bin/swift` など Swift.org ツールチェインの `swift` を優先して使う。
+- 開発環境の Xcode / OS の組み合わせによっては Swift 6.3+ が同梱されていないため、
+  必要に応じて https://www.swift.org/install/macos/ から Swift.org ツールチェインを導入する。
 
 ## 開発方針
 
