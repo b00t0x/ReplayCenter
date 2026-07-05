@@ -319,7 +319,10 @@ private struct ChannelSelectionRow: View {
     }
 
     private var showsLiveBadge: Bool {
-        programStyle.isHighlighted && item.currentProgram?.name.hasPrefix("[生]") == true
+        guard programStyle.isHighlighted, let programName = item.currentProgram?.name else {
+            return false
+        }
+        return programName.contains("[生]") || programName.contains("生中継")
     }
 
     private var titleFont: Font {
