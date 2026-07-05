@@ -54,7 +54,10 @@ Codex 向け開発ルールである。
 
 ## Git
 
-- v1.0.0 前の整理中は main 直コミットでよい。
+- 通常の小変更、UI 調整、ドキュメント修正、軽いバグ修正は main 直コミットでよい。
+- 大きめの機能改修、設計が揺れそうな作業、途中で壊れた状態が続きそうな作業は
+  feature branch を使う。
+- main は「常にリリース可能に近い作業線」として扱い、壊れたまま長く寝かせない。
 - GitHub Actions は `workflow_dispatch` による dmg artifact 生成と、
   `v*` tag push による draft GitHub Release 作成に使う。
 - Release note は `CHANGELOG.md` の該当 version section から生成する。
