@@ -40,7 +40,6 @@ struct ChannelSelectorView: View {
                         Button("閉じる") {
                             onCancel()
                         }
-                        .keyboardShortcut(.escape, modifiers: [])
                     }
                     .padding(12)
 
@@ -98,6 +97,13 @@ struct ChannelSelectorView: View {
         .onKeyPress(.return) {
             selectHighlightedItem()
             return .handled
+        }
+        .onKeyPress(.escape) {
+            onCancel()
+            return .handled
+        }
+        .onExitCommand {
+            onCancel()
         }
     }
 

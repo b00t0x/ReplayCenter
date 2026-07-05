@@ -340,6 +340,13 @@ struct ContentView: View {
             }
             return .ignored
         }
+        if isChannelSelectorPresented {
+            if keyPress.key == .escape {
+                closeChannelSelector()
+                return .handled
+            }
+            return .ignored
+        }
         guard !isChannelSelectorPresented, !model.isSettingsPresented else { return .ignored }
 
         if keyPress.key == .escape {
