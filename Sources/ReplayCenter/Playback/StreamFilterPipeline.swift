@@ -5,6 +5,7 @@ import SwiftVLC
 enum StreamFilterPipelineEvent: Sendable {
     case audioStateChanged(AudioStreamState)
     case broadcastClockChanged(BroadcastClockState)
+    case eventRelayChanged(EventRelayCandidate?)
     case streamInputEnded(error: String?)
     case filterExited(status: Int32, reason: Int)
 }
@@ -16,6 +17,26 @@ struct BroadcastClockState: Equatable, Sendable {
 
     var delaySeconds: TimeInterval {
         receivedAt.timeIntervalSince(date)
+    }
+}
+
+struct EventRelayCandidate: Equatable, Sendable {
+    let groupType: Int
+    let sourceNetworkId: Int
+    let sourceTransportStreamId: Int
+    let sourceServiceId: Int
+    let sourceEventId: Int
+    let targetNetworkId: Int
+    let targetTransportStreamId: Int
+    let targetServiceId: Int
+    let targetEventId: Int
+
+    var debugText: String {
+        "relay group=\(hex(groupType)) \(hex(sourceNetworkId))/\(hex(sourceTransportStreamId))/\(hex(sourceServiceId))/\(hex(sourceEventId)) -> \(hex(targetNetworkId))/\(hex(targetTransportStreamId))/\(hex(targetServiceId))/\(hex(targetEventId))"
+    }
+
+    private func hex(_ value: Int) -> String {
+        "0x" + String(value, radix: 16)
     }
 }
 
@@ -409,9 +430,55 @@ private final class FilterStatusReader: @unchecked Sendable {
             return
         }
 
-        if fields["audioState"] != nil || fields["clock"] != nil {
+        if let relay = fields["relay"] {
+            if relay == "none" {
+                onEvent(.eventRelayChanged(nil))
+                return
+            }
+            if relay == "event", let candidate = Self.eventRelayCandidate(from: fields) {
+                onEvent(.eventRelayChanged(candidate))
+                return
+            }
+        }
+
+        if fields["audioState"] != nil || fields["clock"] != nil || fields["relay"] != nil {
             fputs("[\(label)] ignored filter status line: \(line)\n", stderr)
         }
+    }
+
+    private static func eventRelayCandidate(from fields: [String: String]) -> EventRelayCandidate? {
+        guard let groupType = intValue(fields["group"]),
+              let sourceNetworkId = intValue(fields["sourceNid"]),
+              let sourceTransportStreamId = intValue(fields["sourceTsid"]),
+              let sourceServiceId = intValue(fields["sourceSid"]),
+              let sourceEventId = intValue(fields["sourceEid"]),
+              let targetNetworkId = intValue(fields["targetNid"]),
+              let targetTransportStreamId = intValue(fields["targetTsid"]),
+              let targetServiceId = intValue(fields["targetSid"]),
+              let targetEventId = intValue(fields["targetEid"])
+        else {
+            return nil
+        }
+
+        return EventRelayCandidate(
+            groupType: groupType,
+            sourceNetworkId: sourceNetworkId,
+            sourceTransportStreamId: sourceTransportStreamId,
+            sourceServiceId: sourceServiceId,
+            sourceEventId: sourceEventId,
+            targetNetworkId: targetNetworkId,
+            targetTransportStreamId: targetTransportStreamId,
+            targetServiceId: targetServiceId,
+            targetEventId: targetEventId
+        )
+    }
+
+    private static func intValue(_ value: String?) -> Int? {
+        guard let value else { return nil }
+        if value.hasPrefix("0x") || value.hasPrefix("0X") {
+            return Int(value.dropFirst(2), radix: 16)
+        }
+        return Int(value)
     }
 
     private static func clockDate(from value: String) -> Date? {

@@ -59,7 +59,7 @@ struct TileView: View {
                         Text(model.streamInfoText(displayPixelSize: displayPixelSize(for: proxy.size)))
                             .font(.caption2.monospaced())
                             .multilineTextAlignment(.trailing)
-                            .lineLimit(5)
+                            .lineLimit(8)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 4)
                             .background(.black.opacity(0.72))

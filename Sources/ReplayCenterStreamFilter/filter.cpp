@@ -20,9 +20,12 @@ namespace {
 constexpr int TS_PACKET_SIZE = 188;
 constexpr int SYNC_BYTE = 0x47;
 constexpr int PID_PAT = 0x0000;
+constexpr int PID_EIT = 0x0012;
 constexpr int PID_TIME = 0x0014;
+constexpr int TABLE_ID_EIT_PRESENT_FOLLOWING_ACTUAL = 0x4e;
 constexpr int TABLE_ID_TDT = 0x70;
 constexpr int TABLE_ID_TOT = 0x73;
+constexpr int DESCRIPTOR_TAG_EVENT_GROUP = 0xd6;
 constexpr int STREAM_TYPE_AAC_ADTS = 0x0f;
 
 void writeAll(FILE *out, const uint8_t *data, size_t size);
@@ -125,7 +128,24 @@ int payloadOffset(const uint8_t *packet)
     return offset;
 }
 
-bool parsePat(const uint8_t *payload, int size, int *pmtPid)
+struct PatProgramInfo {
+    int programNumber = -1;
+    int pmtPid = -1;
+};
+
+struct EventRelayCandidate {
+    int groupType = -1;
+    int sourceNetworkId = -1;
+    int sourceTransportStreamId = -1;
+    int sourceServiceId = -1;
+    int sourceEventId = -1;
+    int targetNetworkId = -1;
+    int targetTransportStreamId = -1;
+    int targetServiceId = -1;
+    int targetEventId = -1;
+};
+
+bool parsePat(const uint8_t *payload, int size, PatProgramInfo *info)
 {
     if (size <= 0) {
         return false;
@@ -152,7 +172,8 @@ bool parsePat(const uint8_t *payload, int size, int *pmtPid)
         int programNumber = (section[offset] << 8) | section[offset + 1];
         int pid = ((section[offset + 2] & 0x1f) << 8) | section[offset + 3];
         if (programNumber != 0) {
-            *pmtPid = pid;
+            info->programNumber = programNumber;
+            info->pmtPid = pid;
             return true;
         }
     }
@@ -232,6 +253,117 @@ bool parsePmtSection(const uint8_t *section, int sectionSize, std::vector<int> *
         offset += 5 + esInfoLength;
     }
     return !audioPids->empty();
+}
+
+bool parseEventGroupDescriptor(
+    const uint8_t *body,
+    int length,
+    const EventRelayCandidate &source,
+    EventRelayCandidate *candidate
+)
+{
+    if (length < 1) {
+        return false;
+    }
+
+    int groupType = body[0] >> 4;
+    int eventCount = body[0] & 0x0f;
+    if (groupType != 0x02 && groupType != 0x04) {
+        return false;
+    }
+
+    if (groupType != 0x04 && groupType != 0x05) {
+        int offset = 1;
+        if (offset + eventCount * 4 > length || eventCount <= 0) {
+            return false;
+        }
+        candidate->groupType = groupType;
+        candidate->sourceNetworkId = source.sourceNetworkId;
+        candidate->sourceTransportStreamId = source.sourceTransportStreamId;
+        candidate->sourceServiceId = source.sourceServiceId;
+        candidate->sourceEventId = source.sourceEventId;
+        candidate->targetNetworkId = source.sourceNetworkId;
+        candidate->targetTransportStreamId = source.sourceTransportStreamId;
+        candidate->targetServiceId = (body[offset] << 8) | body[offset + 1];
+        candidate->targetEventId = (body[offset + 2] << 8) | body[offset + 3];
+        return true;
+    }
+
+    if (eventCount != 0 || length < 9) {
+        return false;
+    }
+
+    int offset = 1;
+    candidate->groupType = groupType;
+    candidate->sourceNetworkId = source.sourceNetworkId;
+    candidate->sourceTransportStreamId = source.sourceTransportStreamId;
+    candidate->sourceServiceId = source.sourceServiceId;
+    candidate->sourceEventId = source.sourceEventId;
+    candidate->targetNetworkId = (body[offset] << 8) | body[offset + 1];
+    candidate->targetTransportStreamId = (body[offset + 2] << 8) | body[offset + 3];
+    candidate->targetServiceId = (body[offset + 4] << 8) | body[offset + 5];
+    candidate->targetEventId = (body[offset + 6] << 8) | body[offset + 7];
+    return true;
+}
+
+bool parseEitSection(
+    const uint8_t *section,
+    int sectionSize,
+    int selectedServiceId,
+    EventRelayCandidate *candidate
+)
+{
+    if (selectedServiceId < 0
+        || sectionSize < 18
+        || section[0] != TABLE_ID_EIT_PRESENT_FOLLOWING_ACTUAL) {
+        return false;
+    }
+
+    int sectionLength = ((section[1] & 0x0f) << 8) | section[2];
+    if (sectionLength + 3 > sectionSize || sectionLength < 15) {
+        return false;
+    }
+
+    int serviceId = (section[3] << 8) | section[4];
+    if (serviceId != selectedServiceId) {
+        return false;
+    }
+
+    int transportStreamId = (section[8] << 8) | section[9];
+    int originalNetworkId = (section[10] << 8) | section[11];
+    int eventsEnd = 3 + sectionLength - 4;
+    int offset = 14;
+    if (offset + 12 > eventsEnd) {
+        return false;
+    }
+
+    EventRelayCandidate source;
+    source.sourceNetworkId = originalNetworkId;
+    source.sourceTransportStreamId = transportStreamId;
+    source.sourceServiceId = serviceId;
+    source.sourceEventId = (section[offset] << 8) | section[offset + 1];
+
+    int descriptorsLoopLength = ((section[offset + 10] & 0x0f) << 8) | section[offset + 11];
+    int descriptorOffset = offset + 12;
+    int descriptorEnd = descriptorOffset + descriptorsLoopLength;
+    if (descriptorEnd > eventsEnd) {
+        return false;
+    }
+
+    while (descriptorOffset + 2 <= descriptorEnd) {
+        int tag = section[descriptorOffset];
+        int length = section[descriptorOffset + 1];
+        int bodyOffset = descriptorOffset + 2;
+        if (bodyOffset + length > descriptorEnd) {
+            return false;
+        }
+        if (tag == DESCRIPTOR_TAG_EVENT_GROUP
+            && parseEventGroupDescriptor(section + bodyOffset, length, source, candidate)) {
+            return true;
+        }
+        descriptorOffset = bodyOffset + length;
+    }
+    return false;
 }
 
 int decodeBcd(uint8_t value)
@@ -648,13 +780,22 @@ public:
         updateSelectedAudioPid(out);
 
         if (pid == PID_PAT && offset >= 0) {
-            int pmtPid = -1;
-            if (parsePat(packet + offset, TS_PACKET_SIZE - offset, &pmtPid) && pmtPid_ != pmtPid) {
-                pmtPid_ = pmtPid;
+            PatProgramInfo info;
+            if (parsePat(packet + offset, TS_PACKET_SIZE - offset, &info)
+                && (pmtPid_ != info.pmtPid || serviceId_ != info.programNumber)) {
+                pmtPid_ = info.pmtPid;
+                serviceId_ = info.programNumber;
                 pmtSection_.clear();
                 pmtSectionExpectedSize_ = 0;
-                REPLAYCENTER_FILTER_DEBUG_LOG("[filter] pmt pid=0x%x\n", pmtPid_);
+                eitSection_.clear();
+                eitSectionExpectedSize_ = 0;
+                lastRelayStatus_.clear();
+                REPLAYCENTER_FILTER_DEBUG_LOG("[filter] service id=0x%x pmt pid=0x%x\n", serviceId_, pmtPid_);
             }
+            writeAll(out, packet, TS_PACKET_SIZE);
+            return;
+        } else if (pid == PID_EIT && offset >= 0) {
+            handleEitPacket(packet, offset);
             writeAll(out, packet, TS_PACKET_SIZE);
             return;
         } else if (pid == PID_TIME && offset >= 0) {
@@ -878,6 +1019,64 @@ private:
         );
     }
 
+    void handleEitPacket(const uint8_t *packet, int offset)
+    {
+        if (!appendPsiSection(packet, offset, &eitSection_, &eitSectionExpectedSize_)) {
+            return;
+        }
+        if (eitSectionExpectedSize_ < 6
+            || eitSection_[0] != TABLE_ID_EIT_PRESENT_FOLLOWING_ACTUAL
+            || serviceId_ < 0) {
+            return;
+        }
+        int sectionServiceId = (eitSection_[3] << 8) | eitSection_[4];
+        if (sectionServiceId != serviceId_) {
+            return;
+        }
+
+        EventRelayCandidate candidate;
+        bool hasCandidate = parseEitSection(
+            eitSection_.data(),
+            static_cast<int>(eitSectionExpectedSize_),
+            serviceId_,
+            &candidate
+        );
+        emitRelayStatus(hasCandidate ? relayStatusLabel(candidate) : "none");
+    }
+
+    void emitRelayStatus(const std::string &status)
+    {
+        if (status == lastRelayStatus_) {
+            return;
+        }
+        lastRelayStatus_ = status;
+        if (status == "none") {
+            std::fprintf(stderr, "[filter-status] relay=none\n");
+            return;
+        }
+        std::fprintf(stderr, "[filter-status] relay=event %s\n", status.c_str());
+    }
+
+    std::string relayStatusLabel(const EventRelayCandidate &candidate) const
+    {
+        char buffer[256];
+        std::snprintf(
+            buffer,
+            sizeof(buffer),
+            "group=0x%x sourceNid=0x%x sourceTsid=0x%x sourceSid=0x%x sourceEid=0x%x targetNid=0x%x targetTsid=0x%x targetSid=0x%x targetEid=0x%x",
+            candidate.groupType,
+            candidate.sourceNetworkId,
+            candidate.sourceTransportStreamId,
+            candidate.sourceServiceId,
+            candidate.sourceEventId,
+            candidate.targetNetworkId,
+            candidate.targetTransportStreamId,
+            candidate.targetServiceId,
+            candidate.targetEventId
+        );
+        return buffer;
+    }
+
     int outputAudioPid() const
     {
         if (audioPids_.size() >= 2 && !forcedAudioPid_) {
@@ -1001,10 +1200,13 @@ private:
     }
 
     int pmtPid_ = -1;
+    int serviceId_ = -1;
     int audioPid_ = -1;
     bool forcedAudioPid_ = false;
     std::vector<uint8_t> pmtSection_;
     size_t pmtSectionExpectedSize_ = 0;
+    std::vector<uint8_t> eitSection_;
+    size_t eitSectionExpectedSize_ = 0;
     std::vector<uint8_t> clockSection_;
     size_t clockSectionExpectedSize_ = 0;
     int pmtOutputCounter_ = 0;
@@ -1013,6 +1215,7 @@ private:
     int lastStatusSelectedAudioPid_ = -1;
     std::string lastAudioState_;
     std::string lastClockStatus_;
+    std::string lastRelayStatus_;
     bool muxSelectedToStereo_ = true;
     std::vector<uint8_t> currentPes_;
     std::vector<uint8_t> aacWorkspace_;
