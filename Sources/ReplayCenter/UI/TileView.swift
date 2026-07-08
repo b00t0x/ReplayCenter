@@ -10,6 +10,7 @@ struct TileView: View {
     let showStreamInfo: Bool
     let showFocusRing: Bool
     let hoverInteractionsActive: Bool
+    let forceHover: Bool
     let topOverlayInset: CGFloat
     let channelProgramInfo: ChannelProgramOverlayInfo?
     let channelProgramOverlayVisibility: ChannelProgramOverlayVisibility
@@ -161,7 +162,7 @@ struct TileView: View {
     }
 
     private var effectiveIsHovering: Bool {
-        isHovering && hoverInteractionsActive
+        (isHovering || forceHover) && hoverInteractionsActive
     }
 
     private var labelBackgroundOpacity: Double {

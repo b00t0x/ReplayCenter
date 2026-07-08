@@ -6,6 +6,7 @@ struct ContentView: View {
     let onChannelSelectorPresentationChanged: (Bool) -> Void
     let onTileLayoutPickerPresentationChanged: (Bool) -> Void
     let onFullScreenExitRequested: () -> Bool
+    let onRevealHoverInteractions: () -> Void
     let onContentWindowDragChanged: () -> Void
     let onContentWindowDragEnded: () -> Void
     @State private var isChannelSelectorPresented = false
@@ -154,6 +155,7 @@ struct ContentView: View {
                             showStreamInfo: model.settings.showStreamInfoOverlay ?? false,
                             showFocusRing: windowChrome.isHovering && model.layout.tileCount != 1,
                             hoverInteractionsActive: windowChrome.areHoverInteractionsActive,
+                            forceHover: windowChrome.forceFocusedTileHover && model.focusedIndex == index,
                             topOverlayInset: topOverlayInset,
                             channelProgramInfo: model.channelProgramOverlayInfo(for: tile),
                             channelProgramOverlayVisibility: model.settings.channelProgramOverlayVisibility ?? .onHover
@@ -378,9 +380,11 @@ struct ContentView: View {
             return .handled
         case "[":
             model.decreaseVolume(stoppingAtRepeatBoundary: keyPress.phase.contains(.repeat))
+            onRevealHoverInteractions()
             return .handled
         case "]":
             model.increaseVolume(stoppingAtRepeatBoundary: keyPress.phase.contains(.repeat))
+            onRevealHoverInteractions()
             return .handled
         default:
             return .ignored

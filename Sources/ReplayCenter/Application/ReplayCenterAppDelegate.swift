@@ -11,6 +11,7 @@ private struct FixedWindowScale {
 final class WindowChromeModel {
     var isHovering = false
     var areHoverInteractionsActive = false
+    var forceFocusedTileHover = false
     var titlebarHeight: CGFloat = 0
     var topOverlayChromeHeight: CGFloat = 0
 }
@@ -111,6 +112,9 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             },
             onFullScreenExitRequested: { [weak self] in
                 self?.exitFullScreenIfNeeded() ?? false
+            },
+            onRevealHoverInteractions: { [weak self] in
+                self?.revealHoverInteractions()
             },
             onContentWindowDragChanged: { [weak self] in
                 self?.moveWindowForContentDrag()
@@ -391,6 +395,9 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         let isFullScreen = window.styleMask.contains(.fullScreen)
         let shouldAutoHide = shouldAutoHideHoverInteractions
 
+        if windowChrome.forceFocusedTileHover {
+            windowChrome.forceFocusedTileHover = false
+        }
         if windowChrome.isHovering != isHovering {
             windowChrome.isHovering = isHovering
         }
@@ -414,6 +421,38 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
             for: window,
             mouseLocation: mouseLocation,
             isHovering: isHovering,
+            isFullScreen: isFullScreen
+        )
+        if abs(windowChrome.topOverlayChromeHeight - topOverlayChromeHeight) > 0.5 {
+            windowChrome.topOverlayChromeHeight = topOverlayChromeHeight
+        }
+    }
+
+    private func revealHoverInteractions() {
+        guard let window, window.isVisible else { return }
+        let isFullScreen = window.styleMask.contains(.fullScreen)
+        let mouseLocation = NSEvent.mouseLocation
+
+        windowChrome.forceFocusedTileHover = true
+        windowChrome.isHovering = true
+        windowChrome.areHoverInteractionsActive = true
+
+        mouseInactivityTask?.cancel()
+        mouseInactivityTask = nil
+        if shouldAutoHideHoverInteractions {
+            scheduleMouseInactivityTimeout(for: window)
+        }
+
+        if !isFullScreen {
+            setTitlebarVisible(true, in: window)
+        } else {
+            updateTitlebarMetrics(for: window)
+        }
+
+        let topOverlayChromeHeight = topOverlayChromeHeight(
+            for: window,
+            mouseLocation: mouseLocation,
+            isHovering: true,
             isFullScreen: isFullScreen
         )
         if abs(windowChrome.topOverlayChromeHeight - topOverlayChromeHeight) > 0.5 {
@@ -449,6 +488,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
         guard isHovering else {
             windowChrome.areHoverInteractionsActive = false
             windowChrome.isHovering = false
+            windowChrome.forceFocusedTileHover = false
             windowChrome.topOverlayChromeHeight = 0
             setTitlebarVisible(false, in: window)
             return
@@ -456,6 +496,7 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
         windowChrome.areHoverInteractionsActive = false
         windowChrome.isHovering = false
+        windowChrome.forceFocusedTileHover = false
         if !window.styleMask.contains(.fullScreen) {
             setTitlebarVisible(false, in: window)
         } else {
@@ -791,10 +832,12 @@ final class ReplayCenterAppDelegate: NSObject, NSApplicationDelegate, NSWindowDe
 
     @objc private func decreaseFocusedTileVolume(_ sender: Any?) {
         tileGrid?.decreaseVolume(stoppingAtRepeatBoundary: NSApp.currentEvent?.isARepeat == true)
+        revealHoverInteractions()
     }
 
     @objc private func increaseFocusedTileVolume(_ sender: Any?) {
         tileGrid?.increaseVolume(stoppingAtRepeatBoundary: NSApp.currentEvent?.isARepeat == true)
+        revealHoverInteractions()
     }
 
     @objc private func reloadFocusedTile(_ sender: Any?) {
