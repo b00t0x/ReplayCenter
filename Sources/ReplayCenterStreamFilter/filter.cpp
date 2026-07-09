@@ -27,6 +27,7 @@ constexpr int TABLE_ID_TDT = 0x70;
 constexpr int TABLE_ID_TOT = 0x73;
 constexpr int DESCRIPTOR_TAG_EVENT_GROUP = 0xd6;
 constexpr int STREAM_TYPE_AAC_ADTS = 0x0f;
+constexpr int EVENT_RELAY_CLEAR_MISS_THRESHOLD = 4;
 
 void writeAll(FILE *out, const uint8_t *data, size_t size);
 
@@ -1041,7 +1042,18 @@ private:
             serviceId_,
             &candidate
         );
-        emitRelayStatus(hasCandidate ? relayStatusLabel(candidate) : "none");
+        if (hasCandidate) {
+            relayMissCount_ = 0;
+            emitRelayStatus(relayStatusLabel(candidate));
+            return;
+        }
+
+        if (relayMissCount_ < EVENT_RELAY_CLEAR_MISS_THRESHOLD) {
+            ++relayMissCount_;
+        }
+        if (relayMissCount_ >= EVENT_RELAY_CLEAR_MISS_THRESHOLD) {
+            emitRelayStatus("none");
+        }
     }
 
     void emitRelayStatus(const std::string &status)
@@ -1216,6 +1228,7 @@ private:
     std::string lastAudioState_;
     std::string lastClockStatus_;
     std::string lastRelayStatus_;
+    int relayMissCount_ = EVENT_RELAY_CLEAR_MISS_THRESHOLD;
     bool muxSelectedToStereo_ = true;
     std::vector<uint8_t> currentPes_;
     std::vector<uint8_t> aacWorkspace_;
