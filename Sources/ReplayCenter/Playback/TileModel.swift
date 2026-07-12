@@ -11,6 +11,7 @@ final class TileModel: Identifiable {
     private(set) var audioStreamState: AudioStreamState
     private(set) var broadcastClockState: BroadcastClockState?
     private(set) var eventRelayCandidate: EventRelayCandidate?
+    private(set) var eventRelayFollowStatus: String?
     private(set) var currentAudioSelection: AudioSelection
     private(set) var isMuted: Bool
     private(set) var volumePercent: Int
@@ -19,6 +20,8 @@ final class TileModel: Identifiable {
     private var started = false
     private var streamFilterPipeline: StreamFilterPipeline?
     private var activePipelineID: UUID?
+    @ObservationIgnored var onBroadcastClockChanged: ((BroadcastClockState) -> Void)?
+    @ObservationIgnored var onEventRelayCandidateChanged: ((EventRelayCandidate?) -> Void)?
 
     init(stream: StreamConfig?, config: AppConfig, instance: VLCInstance) {
         self.stream = stream
@@ -28,6 +31,7 @@ final class TileModel: Identifiable {
         audioStreamState = .unknown
         broadcastClockState = nil
         eventRelayCandidate = nil
+        eventRelayFollowStatus = nil
         currentAudioSelection = AudioSelection(audioMode: stream?.audioMode ?? .left)
         isMuted = true
         volumePercent = VolumeLevel.normalized(config.volumePercent)
@@ -62,7 +66,7 @@ final class TileModel: Identifiable {
         playbackState = .idle
         audioStreamState = .unknown
         broadcastClockState = nil
-        eventRelayCandidate = nil
+        updateEventRelayCandidate(nil)
         activePipelineID = nil
         player.stop()
         streamFilterPipeline?.stop()
@@ -102,7 +106,7 @@ final class TileModel: Identifiable {
         playbackState = .idle
         audioStreamState = .unknown
         broadcastClockState = nil
-        eventRelayCandidate = nil
+        updateEventRelayCandidate(nil)
         activePipelineID = nil
         player.stop()
         streamFilterPipeline?.stop()
@@ -122,7 +126,7 @@ final class TileModel: Identifiable {
         playbackState = .starting
         audioStreamState = .unknown
         broadcastClockState = nil
-        eventRelayCandidate = nil
+        updateEventRelayCandidate(nil)
         activePipelineID = nil
         player.stop()
         streamFilterPipeline?.stop()
@@ -180,8 +184,9 @@ final class TileModel: Identifiable {
             }
         case let .broadcastClockChanged(state):
             broadcastClockState = state
+            onBroadcastClockChanged?(state)
         case let .eventRelayChanged(candidate):
-            eventRelayCandidate = candidate
+            updateEventRelayCandidate(candidate)
         case let .streamInputEnded(error):
             if let error {
                 failPlayback("stream input ended: \(error)")
@@ -228,7 +233,7 @@ final class TileModel: Identifiable {
         return "<unchanged>"
     }
 
-    func streamInfoText(displayPixelSize: CGSize?) -> String {
+    func streamInfoText(displayPixelSize: CGSize?, eventRelayText: String?) -> String {
         guard let stream else { return "未割り当て" }
         let modeText: String
         if let playbackMode = stream.playbackMode {
@@ -254,10 +259,24 @@ final class TileModel: Identifiable {
             lines.append("input=\(formatOptionalSize(player.videoSize)) / tile=\(formatDisplaySize(displayPixelSize))")
         }
         lines.append(inputClockDebugText)
-        if let eventRelayCandidate {
-            lines.append(eventRelayCandidate.debugText)
+        if let eventRelayText {
+            lines.append(eventRelayText)
+        }
+        if let eventRelayFollowStatus {
+            lines.append(eventRelayFollowStatus)
         }
         return lines.joined(separator: "\n")
+    }
+
+    func setEventRelayFollowStatus(_ status: String?) {
+        eventRelayFollowStatus = status
+    }
+
+    private func updateEventRelayCandidate(_ candidate: EventRelayCandidate?) {
+        guard eventRelayCandidate != candidate else { return }
+        eventRelayCandidate = candidate
+        eventRelayFollowStatus = nil
+        onEventRelayCandidateChanged?(candidate)
     }
 
     private func formatOptionalSize(_ size: CGSize?) -> String {

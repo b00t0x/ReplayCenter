@@ -135,6 +135,12 @@ final class ChannelCatalogModel {
         items.first { $0.id == channelID }
     }
 
+    func item(networkId: Int, serviceId: Int) -> ChannelSelectionItem? {
+        items.first {
+            $0.channel.networkId == networkId && $0.channel.serviceId == serviceId
+        }
+    }
+
     func overlayInfo(channelID: Int) -> ChannelProgramOverlayInfo? {
         guard let item = item(channelID: channelID) else { return nil }
         return ChannelProgramOverlayInfo(

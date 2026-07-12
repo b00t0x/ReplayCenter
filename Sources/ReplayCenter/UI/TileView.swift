@@ -13,6 +13,7 @@ struct TileView: View {
     let forceHover: Bool
     let topOverlayInset: CGFloat
     let channelProgramInfo: ChannelProgramOverlayInfo?
+    let eventRelayText: String?
     let channelProgramOverlayVisibility: ChannelProgramOverlayVisibility
     let onFocus: () -> Void
     let onOpenChannelSelector: () -> Void
@@ -56,7 +57,10 @@ struct TileView: View {
                 }
                 .overlay(alignment: .topTrailing) {
                     if effectiveIsHovering, model.stream != nil, showStreamInfo {
-                        Text(model.streamInfoText(displayPixelSize: displayPixelSize(for: proxy.size)))
+                        Text(model.streamInfoText(
+                            displayPixelSize: displayPixelSize(for: proxy.size),
+                            eventRelayText: eventRelayText
+                        ))
                             .font(.caption2.monospaced())
                             .multilineTextAlignment(.trailing)
                             .lineLimit(8)

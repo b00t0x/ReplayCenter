@@ -69,6 +69,7 @@ struct AppSettings: Codable, Equatable {
     var keepFocusOnSingleLargeTile: Bool?
     var showStreamInfoOverlay: Bool?
     var channelProgramOverlayVisibility: ChannelProgramOverlayVisibility?
+    var followEventRelays: Bool?
     var programGenreDisplaySettings: ProgramGenreDisplaySettings?
     var largeTilePlayback: TilePlaybackProfile?
     var smallTilePlayback: TilePlaybackProfile?
@@ -79,6 +80,7 @@ struct AppSettings: Codable, Equatable {
         case keepFocusOnSingleLargeTile
         case showStreamInfoOverlay
         case channelProgramOverlayVisibility
+        case followEventRelays
         case programGenreDisplaySettings
         case largeTilePlayback
         case smallTilePlayback
@@ -90,6 +92,7 @@ struct AppSettings: Codable, Equatable {
         keepFocusOnSingleLargeTile: Bool?,
         showStreamInfoOverlay: Bool?,
         channelProgramOverlayVisibility: ChannelProgramOverlayVisibility?,
+        followEventRelays: Bool?,
         programGenreDisplaySettings: ProgramGenreDisplaySettings?,
         largeTilePlayback: TilePlaybackProfile?,
         smallTilePlayback: TilePlaybackProfile?
@@ -99,6 +102,7 @@ struct AppSettings: Codable, Equatable {
         self.keepFocusOnSingleLargeTile = keepFocusOnSingleLargeTile
         self.showStreamInfoOverlay = showStreamInfoOverlay
         self.channelProgramOverlayVisibility = channelProgramOverlayVisibility
+        self.followEventRelays = followEventRelays
         self.programGenreDisplaySettings = programGenreDisplaySettings
         self.largeTilePlayback = largeTilePlayback
         self.smallTilePlayback = smallTilePlayback
@@ -114,6 +118,7 @@ struct AppSettings: Codable, Equatable {
             ChannelProgramOverlayVisibility.self,
             forKey: .channelProgramOverlayVisibility
         )
+        followEventRelays = try container.decodeIfPresent(Bool.self, forKey: .followEventRelays)
         programGenreDisplaySettings = try container.decodeIfPresent(
             ProgramGenreDisplaySettings.self,
             forKey: .programGenreDisplaySettings
@@ -132,6 +137,7 @@ struct AppSettings: Codable, Equatable {
             channelProgramOverlayVisibility,
             forKey: .channelProgramOverlayVisibility
         )
+        try container.encodeIfPresent(followEventRelays, forKey: .followEventRelays)
         try container.encodeIfPresent(
             programGenreDisplaySettings,
             forKey: .programGenreDisplaySettings
@@ -146,6 +152,7 @@ struct AppSettings: Codable, Equatable {
         keepFocusOnSingleLargeTile: nil,
         showStreamInfoOverlay: nil,
         channelProgramOverlayVisibility: nil,
+        followEventRelays: nil,
         programGenreDisplaySettings: nil,
         largeTilePlayback: nil,
         smallTilePlayback: nil
@@ -158,6 +165,7 @@ struct AppSettings: Codable, Equatable {
             keepFocusOnSingleLargeTile: config.keepFocusOnSingleLargeTile ?? true,
             showStreamInfoOverlay: false,
             channelProgramOverlayVisibility: .onHover,
+            followEventRelays: true,
             programGenreDisplaySettings: .preset,
             largeTilePlayback: config.largeTilePlayback ?? TilePlaybackProfile.fallback,
             smallTilePlayback: config.smallTilePlayback ?? TilePlaybackProfile.fallback
@@ -173,6 +181,7 @@ struct AppSettings: Codable, Equatable {
                 ?? true,
             showStreamInfoOverlay: showStreamInfoOverlay ?? false,
             channelProgramOverlayVisibility: channelProgramOverlayVisibility ?? .onHover,
+            followEventRelays: followEventRelays ?? true,
             programGenreDisplaySettings: programGenreDisplaySettings ?? .preset,
             largeTilePlayback: largeTilePlayback
                 ?? config.largeTilePlayback
@@ -190,6 +199,7 @@ struct AppSettings: Codable, Equatable {
             "keepFocusOnSingleLargeTile=\(keepFocusOnSingleLargeTile.map(String.init) ?? "<nil>")",
             "showStreamInfoOverlay=\(showStreamInfoOverlay.map(String.init) ?? "<nil>")",
             "channelProgramOverlayVisibility=\(channelProgramOverlayVisibility?.rawValue ?? "<nil>")",
+            "followEventRelays=\(followEventRelays.map(String.init) ?? "<nil>")",
             "programGenreDisplaySettings=\(programGenreDisplaySettings?.summary ?? "<nil>")",
             "largeTilePlayback=\(largeTilePlayback?.summary ?? "<nil>")",
             "smallTilePlayback=\(smallTilePlayback?.summary ?? "<nil>")"

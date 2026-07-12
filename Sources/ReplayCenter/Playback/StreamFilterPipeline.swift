@@ -20,23 +20,41 @@ struct BroadcastClockState: Equatable, Sendable {
     }
 }
 
+struct EventRelayTarget: Equatable, Hashable, Sendable {
+    let networkId: Int
+    let transportStreamId: Int
+    let serviceId: Int
+    let eventId: Int
+}
+
+struct EventRelaySourceIdentity: Equatable, Hashable, Sendable {
+    let networkId: Int
+    let transportStreamId: Int
+    let serviceId: Int
+    let eventId: Int
+}
+
 struct EventRelayCandidate: Equatable, Sendable {
-    let groupType: Int
     let sourceNetworkId: Int
     let sourceTransportStreamId: Int
     let sourceServiceId: Int
     let sourceEventId: Int
-    let targetNetworkId: Int
-    let targetTransportStreamId: Int
-    let targetServiceId: Int
-    let targetEventId: Int
+    let targets: [EventRelayTarget]
+    let sourceStart: Date?
+    let sourceDuration: TimeInterval?
 
-    var debugText: String {
-        "relay group=\(hex(groupType)) \(hex(sourceNetworkId))/\(hex(sourceTransportStreamId))/\(hex(sourceServiceId))/\(hex(sourceEventId)) -> \(hex(targetNetworkId))/\(hex(targetTransportStreamId))/\(hex(targetServiceId))/\(hex(targetEventId))"
+    var sourceEnd: Date? {
+        guard let sourceStart, let sourceDuration else { return nil }
+        return sourceStart.addingTimeInterval(sourceDuration)
     }
 
-    private func hex(_ value: Int) -> String {
-        "0x" + String(value, radix: 16)
+    var sourceIdentity: EventRelaySourceIdentity {
+        EventRelaySourceIdentity(
+            networkId: sourceNetworkId,
+            transportStreamId: sourceTransportStreamId,
+            serviceId: sourceServiceId,
+            eventId: sourceEventId
+        )
     }
 }
 
@@ -447,29 +465,44 @@ private final class FilterStatusReader: @unchecked Sendable {
     }
 
     private static func eventRelayCandidate(from fields: [String: String]) -> EventRelayCandidate? {
-        guard let groupType = intValue(fields["group"]),
-              let sourceNetworkId = intValue(fields["sourceNid"]),
+        guard let sourceNetworkId = intValue(fields["sourceNid"]),
               let sourceTransportStreamId = intValue(fields["sourceTsid"]),
               let sourceServiceId = intValue(fields["sourceSid"]),
               let sourceEventId = intValue(fields["sourceEid"]),
-              let targetNetworkId = intValue(fields["targetNid"]),
-              let targetTransportStreamId = intValue(fields["targetTsid"]),
-              let targetServiceId = intValue(fields["targetSid"]),
-              let targetEventId = intValue(fields["targetEid"])
+              let encodedTargets = fields["targets"]
         else {
             return nil
         }
 
+        let targets: [EventRelayTarget] = encodedTargets
+            .split(separator: ",")
+            .compactMap { encodedTarget in
+                let parts = encodedTarget.split(separator: "/")
+                guard parts.count == 4,
+                      let networkId = intValue(String(parts[0])),
+                      let transportStreamId = intValue(String(parts[1])),
+                      let serviceId = intValue(String(parts[2])),
+                      let eventId = intValue(String(parts[3]))
+                else {
+                    return nil
+                }
+                return EventRelayTarget(
+                    networkId: networkId,
+                    transportStreamId: transportStreamId,
+                    serviceId: serviceId,
+                    eventId: eventId
+                )
+            }
+        guard !targets.isEmpty else { return nil }
+
         return EventRelayCandidate(
-            groupType: groupType,
             sourceNetworkId: sourceNetworkId,
             sourceTransportStreamId: sourceTransportStreamId,
             sourceServiceId: sourceServiceId,
             sourceEventId: sourceEventId,
-            targetNetworkId: targetNetworkId,
-            targetTransportStreamId: targetTransportStreamId,
-            targetServiceId: targetServiceId,
-            targetEventId: targetEventId
+            targets: targets,
+            sourceStart: fields["sourceStart"].flatMap(Self.clockDate(from:)),
+            sourceDuration: fields["sourceDuration"].flatMap(TimeInterval.init)
         )
     }
 

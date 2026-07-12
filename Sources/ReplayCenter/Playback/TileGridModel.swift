@@ -5,6 +5,12 @@ import SwiftVLC
 @MainActor
 @Observable
 final class TileGridModel {
+    private struct ArmedEventRelay {
+        let candidate: EventRelayCandidate
+        let generation: UUID
+        var task: Task<Void, Never>?
+    }
+
     var focusedIndex = 0
     var tiles: [TileModel]
     var layout: TileLayoutConfig
@@ -25,6 +31,7 @@ final class TileGridModel {
     private var config: AppConfig
     private let instance: VLCInstance
     private var epgStationClient: EPGStationClient?
+    @ObservationIgnored private var armedEventRelays: [UUID: ArmedEventRelay] = [:]
 
     init(config: AppConfig, instance: VLCInstance, restoredState: AppState? = nil) {
         self.config = config
@@ -59,6 +66,9 @@ final class TileGridModel {
         } else {
             self.epgStationClient = nil
             self.channelCatalog = nil
+        }
+        for tile in tiles {
+            bindEventRelayCallbacks(to: tile)
         }
     }
 
@@ -256,6 +266,7 @@ final class TileGridModel {
             tileIndex: index,
             epgStationClient: epgStationClient
         )
+        tiles[index].setEventRelayFollowStatus(nil)
         tiles[index].play(
             stream: stream,
             initialVolumePercent: VolumeLevel.normalized(settings.volumePercent ?? defaultVolumePercent)
@@ -414,6 +425,7 @@ final class TileGridModel {
         settings.keepFocusOnSingleLargeTile = settings.keepFocusOnSingleLargeTile ?? true
         settings.showStreamInfoOverlay = settings.showStreamInfoOverlay ?? false
         settings.channelProgramOverlayVisibility = settings.channelProgramOverlayVisibility ?? .onHover
+        settings.followEventRelays = settings.followEventRelays ?? true
         settings.programGenreDisplaySettings = settings.programGenreDisplaySettings
             ?? self.settings.programGenreDisplaySettings
             ?? .preset
@@ -434,6 +446,7 @@ final class TileGridModel {
         applyPlaybackProfilesToTiles(restartPolicy: .whenPlaybackPipelineChanges)
         focus(focusedIndex)
         restoreMutedStates(mutedStatesByTileID)
+        updateEventRelaySchedulingForSettings()
         onSettingsChanged?(settings)
         return true
     }
@@ -448,8 +461,30 @@ final class TileGridModel {
         return channelCatalog?.overlayInfo(channelID: channelID)
     }
 
+    func eventRelayOverlayText(for tile: TileModel) -> String? {
+        guard let candidate = tile.eventRelayCandidate else { return nil }
+        let targetNames = candidate.targets.map { target in
+            if let item = channelCatalog?.item(
+                networkId: target.networkId,
+                serviceId: target.serviceId
+            ) {
+                return item.displayName
+            }
+            return "未登録 (NID \(hex(target.networkId)) / SID \(hex(target.serviceId)))"
+        }
+        var text = "relay target=\(targetNames.joined(separator: ", "))"
+        if let sourceEnd = candidate.sourceEnd {
+            text += " / end=\(sourceEnd.formatted(date: .omitted, time: .standard))"
+        }
+        return text
+    }
+
     private func notifyFocusedTitleChanged() {
         onFocusedTitleChanged?(focusedWindowTitle)
+    }
+
+    private func hex(_ value: Int) -> String {
+        "0x" + String(value, radix: 16)
     }
 
     private func restoreMutedStates(_ mutedStatesByTileID: [UUID: Bool]) {
@@ -559,7 +594,9 @@ final class TileGridModel {
             focusedIndex = min(focusedIndex, tiles.count - 1)
         } else if newCount > oldCount {
             while tiles.count < newCount {
-                tiles.append(TileModel(stream: nil, config: config, instance: instance))
+                let tile = TileModel(stream: nil, config: config, instance: instance)
+                bindEventRelayCallbacks(to: tile)
+                tiles.append(tile)
             }
             if focusFirstNewTile {
                 focusedIndex = oldCount
@@ -574,10 +611,203 @@ final class TileGridModel {
     }
 
     func shutdown() async {
+        cancelAllEventRelayTasks()
         await withTaskGroup(of: Void.self) { group in
             for tile in tiles {
                 group.addTask { await tile.shutdown() }
             }
         }
+    }
+
+    private func bindEventRelayCallbacks(to tile: TileModel) {
+        tile.onEventRelayCandidateChanged = { [weak self, weak tile] candidate in
+            guard let tile else { return }
+            self?.handleEventRelayCandidate(candidate, for: tile)
+        }
+        tile.onBroadcastClockChanged = { [weak self, weak tile] state in
+            guard let tile else { return }
+            self?.handleBroadcastClockChange(state, for: tile)
+        }
+    }
+
+    private func handleEventRelayCandidate(_ candidate: EventRelayCandidate?, for tile: TileModel) {
+        guard let candidate else {
+            if let armed = armedEventRelays[tile.id],
+               let sourceEnd = armed.candidate.sourceEnd,
+               let clockState = tile.broadcastClockState,
+               estimatedBroadcastDate(from: clockState) >= sourceEnd {
+                performEventRelay(for: tile.id, generation: armed.generation)
+                return
+            }
+            disarmEventRelay(for: tile.id)
+            return
+        }
+        guard settings.followEventRelays ?? true else {
+            disarmEventRelay(for: tile.id)
+            return
+        }
+
+        if let armed = armedEventRelays[tile.id],
+           armed.candidate.sourceIdentity != candidate.sourceIdentity {
+            if armed.candidate.sourceEnd != nil {
+                performEventRelay(for: tile.id, generation: armed.generation)
+                return
+            }
+            disarmEventRelay(for: tile.id)
+        }
+        armEventRelay(candidate, for: tile)
+    }
+
+    private func handleBroadcastClockChange(_ state: BroadcastClockState, for tile: TileModel) {
+        guard let armed = armedEventRelays[tile.id],
+              let sourceEnd = armed.candidate.sourceEnd
+        else {
+            return
+        }
+        if estimatedBroadcastDate(from: state) >= sourceEnd {
+            performEventRelay(for: tile.id, generation: armed.generation)
+        } else if armed.task == nil {
+            scheduleEventRelay(for: tile)
+        }
+    }
+
+    private func armEventRelay(_ candidate: EventRelayCandidate, for tile: TileModel) {
+        disarmEventRelay(for: tile.id)
+        let generation = UUID()
+        armedEventRelays[tile.id] = ArmedEventRelay(
+            candidate: candidate,
+            generation: generation,
+            task: nil
+        )
+        guard candidate.sourceEnd != nil else {
+            tile.setEventRelayFollowStatus("relay follow=終了時刻未取得")
+            return
+        }
+        scheduleEventRelay(for: tile)
+    }
+
+    private func scheduleEventRelay(for tile: TileModel) {
+        guard var armed = armedEventRelays[tile.id],
+              armed.task == nil,
+              let sourceEnd = armed.candidate.sourceEnd,
+              let clockState = tile.broadcastClockState
+        else {
+            return
+        }
+
+        let delay = sourceEnd.timeIntervalSince(estimatedBroadcastDate(from: clockState))
+        if delay <= 0 {
+            performEventRelay(for: tile.id, generation: armed.generation)
+            return
+        }
+
+        let generation = armed.generation
+        let tileID = tile.id
+        armed.task = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+            self?.performEventRelay(for: tileID, generation: generation)
+        }
+        armedEventRelays[tile.id] = armed
+    }
+
+    private func performEventRelay(for tileID: UUID, generation: UUID) {
+        guard let armed = armedEventRelays[tileID], armed.generation == generation else { return }
+        armed.task?.cancel()
+        armedEventRelays[tileID] = nil
+        guard settings.followEventRelays ?? true,
+              let tileIndex = tiles.firstIndex(where: { $0.id == tileID })
+        else {
+            return
+        }
+
+        let tile = tiles[tileIndex]
+        guard let channelCatalog else {
+            reportEventRelayFailure("チャンネル一覧未取得", for: tile)
+            return
+        }
+        var seenChannelIDs = Set<Int>()
+        let targetItems = armed.candidate.targets.compactMap { target in
+            channelCatalog.item(networkId: target.networkId, serviceId: target.serviceId)
+        }.filter { seenChannelIDs.insert($0.id).inserted }
+
+        guard targetItems.count == 1, let target = targetItems.first else {
+            let reason = targetItems.isEmpty
+                ? "リレー先が見つかりません"
+                : "リレー先を一意に決定できません (\(targetItems.count)件)"
+            reportEventRelayFailure(reason, for: tile)
+            return
+        }
+        guard target.id != tile.stream?.channelID else {
+            tile.setEventRelayFollowStatus("relay follow=同一チャンネル")
+            logEventRelay("same channel; skipped channelID=\(target.id)", tile: tile)
+            return
+        }
+        guard let epgStationClient else {
+            reportEventRelayFailure("EPGStation未設定", for: tile)
+            return
+        }
+
+        let stream = streamConfig(
+            channelID: target.id,
+            title: target.displayName,
+            tileIndex: tileIndex,
+            epgStationClient: epgStationClient
+        )
+        let volumePercent = tile.volumePercent
+        let wasMuted = tile.isMuted
+        let previousChannelID = tile.stream?.channelID
+        let previousChannelName = tile.stream?.title ?? previousChannelID.map(String.init) ?? "?"
+        tile.play(stream: stream, initialVolumePercent: volumePercent)
+        tile.setMuted(wasMuted)
+        tile.setEventRelayFollowStatus(
+            "relay followed=\(previousChannelName) -> \(target.displayName)"
+        )
+        if tileIndex == focusedIndex {
+            notifyFocusedTitleChanged()
+        }
+        let previousChannelLabel = previousChannelID.map(String.init) ?? "?"
+        logEventRelay(
+            "followed channelID=\(previousChannelLabel)->\(target.id)",
+            tile: tile
+        )
+    }
+
+    private func reportEventRelayFailure(_ reason: String, for tile: TileModel) {
+        tile.setEventRelayFollowStatus("relay follow=\(reason)")
+        logEventRelay("skipped: \(reason)", tile: tile)
+    }
+
+    private func disarmEventRelay(for tileID: UUID) {
+        armedEventRelays.removeValue(forKey: tileID)?.task?.cancel()
+    }
+
+    private func cancelAllEventRelayTasks() {
+        for armed in armedEventRelays.values {
+            armed.task?.cancel()
+        }
+        armedEventRelays.removeAll()
+    }
+
+    private func updateEventRelaySchedulingForSettings() {
+        cancelAllEventRelayTasks()
+        guard settings.followEventRelays ?? true else { return }
+        for tile in tiles {
+            if let candidate = tile.eventRelayCandidate {
+                armEventRelay(candidate, for: tile)
+            }
+        }
+    }
+
+    private func estimatedBroadcastDate(from state: BroadcastClockState) -> Date {
+        state.date.addingTimeInterval(Date().timeIntervalSince(state.receivedAt))
+    }
+
+    private func logEventRelay(_ message: String, tile: TileModel) {
+        let label = tile.stream.map { $0.title ?? $0.url } ?? "empty tile"
+        fputs("[event-relay] [\(label)] \(message)\n", stderr)
     }
 }

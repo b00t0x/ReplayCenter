@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var smallTilePlayback: TilePlaybackProfile
     @State private var showStreamInfoOverlay: Bool
     @State private var showChannelProgramOverlayAlways: Bool
+    @State private var followEventRelays: Bool
     @State private var highlightedProgramGenres: [ProgramGenreCode]
     @State private var dimmedProgramGenres: [ProgramGenreCode]
     @State private var draggingProgramGenre: ProgramGenreDragItem?
@@ -49,6 +50,7 @@ struct SettingsView: View {
         _showChannelProgramOverlayAlways = State(
             initialValue: (model.settings.channelProgramOverlayVisibility ?? .onHover) == .always
         )
+        _followEventRelays = State(initialValue: model.settings.followEventRelays ?? true)
         let programGenreDisplaySettings = model.settings.programGenreDisplaySettings ?? .preset
         _highlightedProgramGenres = State(initialValue: programGenreDisplaySettings.highlightedGenres)
         _dimmedProgramGenres = State(initialValue: programGenreDisplaySettings.dimmedGenres)
@@ -234,6 +236,10 @@ struct SettingsView: View {
                 LeadingSwitchRow(
                     title: "チャンネル/番組情報を常時表示",
                     isOn: $showChannelProgramOverlayAlways
+                )
+                LeadingSwitchRow(
+                    title: "リレー中継を自動追従",
+                    isOn: $followEventRelays
                 )
             }
 
@@ -475,6 +481,7 @@ struct SettingsView: View {
             keepFocusOnSingleLargeTile: model.settings.keepFocusOnSingleLargeTile ?? true,
             showStreamInfoOverlay: showStreamInfoOverlay,
             channelProgramOverlayVisibility: showChannelProgramOverlayAlways ? .always : .onHover,
+            followEventRelays: followEventRelays,
             programGenreDisplaySettings: ProgramGenreDisplaySettings(
                 highlightedGenres: highlightedProgramGenres,
                 dimmedGenres: dimmedProgramGenres

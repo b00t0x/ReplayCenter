@@ -1,6 +1,7 @@
 #include "third_party/tsreadex/aac.hpp"
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -134,17 +135,26 @@ struct PatProgramInfo {
     int pmtPid = -1;
 };
 
+struct EventRelayTarget {
+    int networkId = -1;
+    int transportStreamId = -1;
+    int serviceId = -1;
+    int eventId = -1;
+};
+
 struct EventRelayCandidate {
     int groupType = -1;
     int sourceNetworkId = -1;
     int sourceTransportStreamId = -1;
     int sourceServiceId = -1;
     int sourceEventId = -1;
-    int targetNetworkId = -1;
-    int targetTransportStreamId = -1;
-    int targetServiceId = -1;
-    int targetEventId = -1;
+    std::vector<EventRelayTarget> targets;
+    std::string sourceStart;
+    int sourceDurationSeconds = -1;
 };
+
+int decodeBcd(uint8_t value);
+void mjdToGregorian(int mjd, int *year, int *month, int *day);
 
 bool parsePat(const uint8_t *payload, int size, PatProgramInfo *info)
 {
@@ -229,6 +239,99 @@ bool appendPsiSection(
     return *expectedSize > 0 && section->size() >= *expectedSize;
 }
 
+void collectPsiSections(
+    const uint8_t *packet,
+    int offset,
+    std::vector<uint8_t> *pendingSection,
+    size_t *expectedSize,
+    std::vector<std::vector<uint8_t>> *completedSections
+)
+{
+    completedSections->clear();
+    if (offset < 0 || offset >= TS_PACKET_SIZE) {
+        return;
+    }
+
+    const uint8_t *payload = packet + offset;
+    size_t payloadSize = TS_PACKET_SIZE - static_cast<size_t>(offset);
+
+    auto updateExpectedSize = [&]() -> bool {
+        if (*expectedSize == 0 && pendingSection->size() >= 3) {
+            int sectionLength = (((*pendingSection)[1] & 0x0f) << 8) | (*pendingSection)[2];
+            if (sectionLength < 4 || sectionLength > 1021) {
+                pendingSection->clear();
+                *expectedSize = 0;
+                return false;
+            }
+            *expectedSize = 3 + static_cast<size_t>(sectionLength);
+        }
+        return true;
+    };
+
+    auto finishPendingSection = [&]() {
+        if (*expectedSize > 0 && pendingSection->size() >= *expectedSize) {
+            completedSections->emplace_back(
+                pendingSection->begin(),
+                pendingSection->begin() + static_cast<std::ptrdiff_t>(*expectedSize)
+            );
+            pendingSection->clear();
+            *expectedSize = 0;
+        }
+    };
+
+    if (payloadUnitStart(packet)) {
+        if (payloadSize == 0) {
+            return;
+        }
+        size_t pointer = payload[0];
+        if (1 + pointer > payloadSize) {
+            pendingSection->clear();
+            *expectedSize = 0;
+            return;
+        }
+
+        if (!pendingSection->empty()) {
+            pendingSection->insert(pendingSection->end(), payload + 1, payload + 1 + pointer);
+            if (updateExpectedSize()) {
+                finishPendingSection();
+            }
+            if (!pendingSection->empty()) {
+                pendingSection->clear();
+                *expectedSize = 0;
+            }
+        }
+
+        size_t cursor = 1 + pointer;
+        while (cursor + 3 <= payloadSize && payload[cursor] != 0xff) {
+            int sectionLength = ((payload[cursor + 1] & 0x0f) << 8) | payload[cursor + 2];
+            if (sectionLength < 4 || sectionLength > 1021) {
+                return;
+            }
+            size_t sectionSize = 3 + static_cast<size_t>(sectionLength);
+            if (cursor + sectionSize <= payloadSize) {
+                completedSections->emplace_back(
+                    payload + cursor,
+                    payload + cursor + sectionSize
+                );
+                cursor += sectionSize;
+                continue;
+            }
+            pendingSection->assign(payload + cursor, payload + payloadSize);
+            *expectedSize = sectionSize;
+            return;
+        }
+        return;
+    }
+
+    if (pendingSection->empty()) {
+        return;
+    }
+    pendingSection->insert(pendingSection->end(), payload, payload + payloadSize);
+    if (updateExpectedSize()) {
+        finishPendingSection();
+    }
+}
+
 bool parsePmtSection(const uint8_t *section, int sectionSize, std::vector<int> *audioPids)
 {
     audioPids->clear();
@@ -273,20 +376,23 @@ bool parseEventGroupDescriptor(
         return false;
     }
 
-    if (groupType != 0x04 && groupType != 0x05) {
+    if (groupType == 0x02) {
         int offset = 1;
         if (offset + eventCount * 4 > length || eventCount <= 0) {
             return false;
         }
+        *candidate = source;
         candidate->groupType = groupType;
-        candidate->sourceNetworkId = source.sourceNetworkId;
-        candidate->sourceTransportStreamId = source.sourceTransportStreamId;
-        candidate->sourceServiceId = source.sourceServiceId;
-        candidate->sourceEventId = source.sourceEventId;
-        candidate->targetNetworkId = source.sourceNetworkId;
-        candidate->targetTransportStreamId = source.sourceTransportStreamId;
-        candidate->targetServiceId = (body[offset] << 8) | body[offset + 1];
-        candidate->targetEventId = (body[offset + 2] << 8) | body[offset + 3];
+        candidate->targets.clear();
+        for (int index = 0; index < eventCount; ++index) {
+            EventRelayTarget target;
+            target.networkId = source.sourceNetworkId;
+            target.transportStreamId = source.sourceTransportStreamId;
+            target.serviceId = (body[offset] << 8) | body[offset + 1];
+            target.eventId = (body[offset + 2] << 8) | body[offset + 3];
+            candidate->targets.push_back(target);
+            offset += 4;
+        }
         return true;
     }
 
@@ -294,17 +400,18 @@ bool parseEventGroupDescriptor(
         return false;
     }
 
-    int offset = 1;
+    *candidate = source;
     candidate->groupType = groupType;
-    candidate->sourceNetworkId = source.sourceNetworkId;
-    candidate->sourceTransportStreamId = source.sourceTransportStreamId;
-    candidate->sourceServiceId = source.sourceServiceId;
-    candidate->sourceEventId = source.sourceEventId;
-    candidate->targetNetworkId = (body[offset] << 8) | body[offset + 1];
-    candidate->targetTransportStreamId = (body[offset + 2] << 8) | body[offset + 3];
-    candidate->targetServiceId = (body[offset + 4] << 8) | body[offset + 5];
-    candidate->targetEventId = (body[offset + 6] << 8) | body[offset + 7];
-    return true;
+    candidate->targets.clear();
+    for (int offset = 1; offset + 8 <= length; offset += 8) {
+        EventRelayTarget target;
+        target.networkId = (body[offset] << 8) | body[offset + 1];
+        target.transportStreamId = (body[offset + 2] << 8) | body[offset + 3];
+        target.serviceId = (body[offset + 4] << 8) | body[offset + 5];
+        target.eventId = (body[offset + 6] << 8) | body[offset + 7];
+        candidate->targets.push_back(target);
+    }
+    return !candidate->targets.empty();
 }
 
 bool parseEitSection(
@@ -343,6 +450,40 @@ bool parseEitSection(
     source.sourceTransportStreamId = transportStreamId;
     source.sourceServiceId = serviceId;
     source.sourceEventId = (section[offset] << 8) | section[offset + 1];
+
+    int mjd = (section[offset + 2] << 8) | section[offset + 3];
+    int hour = decodeBcd(section[offset + 4]);
+    int minute = decodeBcd(section[offset + 5]);
+    int second = decodeBcd(section[offset + 6]);
+    int durationHours = decodeBcd(section[offset + 7]);
+    int durationMinutes = decodeBcd(section[offset + 8]);
+    int durationSeconds = decodeBcd(section[offset + 9]);
+    if (mjd != 0xffff
+        && hour >= 0 && hour <= 23
+        && minute >= 0 && minute <= 59
+        && second >= 0 && second <= 59
+        && durationHours >= 0
+        && durationMinutes >= 0 && durationMinutes <= 59
+        && durationSeconds >= 0 && durationSeconds <= 59) {
+        int year = 0;
+        int month = 0;
+        int day = 0;
+        mjdToGregorian(mjd, &year, &month, &day);
+        char start[32];
+        std::snprintf(
+            start,
+            sizeof(start),
+            "%04d-%02d-%02dT%02d:%02d:%02d",
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second
+        );
+        source.sourceStart = start;
+        source.sourceDurationSeconds = durationHours * 3600 + durationMinutes * 60 + durationSeconds;
+    }
 
     int descriptorsLoopLength = ((section[offset + 10] & 0x0f) << 8) | section[offset + 11];
     int descriptorOffset = offset + 12;
@@ -1022,37 +1163,45 @@ private:
 
     void handleEitPacket(const uint8_t *packet, int offset)
     {
-        if (!appendPsiSection(packet, offset, &eitSection_, &eitSectionExpectedSize_)) {
-            return;
-        }
-        if (eitSectionExpectedSize_ < 6
-            || eitSection_[0] != TABLE_ID_EIT_PRESENT_FOLLOWING_ACTUAL
-            || serviceId_ < 0) {
-            return;
-        }
-        int sectionServiceId = (eitSection_[3] << 8) | eitSection_[4];
-        if (sectionServiceId != serviceId_) {
-            return;
-        }
-
-        EventRelayCandidate candidate;
-        bool hasCandidate = parseEitSection(
-            eitSection_.data(),
-            static_cast<int>(eitSectionExpectedSize_),
-            serviceId_,
-            &candidate
+        std::vector<std::vector<uint8_t>> sections;
+        collectPsiSections(
+            packet,
+            offset,
+            &eitSection_,
+            &eitSectionExpectedSize_,
+            &sections
         );
-        if (hasCandidate) {
-            relayMissCount_ = 0;
-            emitRelayStatus(relayStatusLabel(candidate));
-            return;
-        }
+        for (const std::vector<uint8_t> &section : sections) {
+            if (section.size() < 7
+                || section[0] != TABLE_ID_EIT_PRESENT_FOLLOWING_ACTUAL
+                || section[6] != 0
+                || serviceId_ < 0) {
+                continue;
+            }
+            int sectionServiceId = (section[3] << 8) | section[4];
+            if (sectionServiceId != serviceId_) {
+                continue;
+            }
 
-        if (relayMissCount_ < EVENT_RELAY_CLEAR_MISS_THRESHOLD) {
-            ++relayMissCount_;
-        }
-        if (relayMissCount_ >= EVENT_RELAY_CLEAR_MISS_THRESHOLD) {
-            emitRelayStatus("none");
+            EventRelayCandidate candidate;
+            bool hasCandidate = parseEitSection(
+                section.data(),
+                static_cast<int>(section.size()),
+                serviceId_,
+                &candidate
+            );
+            if (hasCandidate) {
+                relayMissCount_ = 0;
+                emitRelayStatus(relayStatusLabel(candidate));
+                continue;
+            }
+
+            if (relayMissCount_ < EVENT_RELAY_CLEAR_MISS_THRESHOLD) {
+                ++relayMissCount_;
+            }
+            if (relayMissCount_ >= EVENT_RELAY_CLEAR_MISS_THRESHOLD) {
+                emitRelayStatus("none");
+            }
         }
     }
 
@@ -1071,22 +1220,64 @@ private:
 
     std::string relayStatusLabel(const EventRelayCandidate &candidate) const
     {
-        char buffer[256];
-        std::snprintf(
-            buffer,
-            sizeof(buffer),
-            "group=0x%x sourceNid=0x%x sourceTsid=0x%x sourceSid=0x%x sourceEid=0x%x targetNid=0x%x targetTsid=0x%x targetSid=0x%x targetEid=0x%x",
-            candidate.groupType,
-            candidate.sourceNetworkId,
-            candidate.sourceTransportStreamId,
-            candidate.sourceServiceId,
-            candidate.sourceEventId,
-            candidate.targetNetworkId,
-            candidate.targetTransportStreamId,
-            candidate.targetServiceId,
-            candidate.targetEventId
-        );
-        return buffer;
+        if (candidate.targets.empty()) {
+            return "none";
+        }
+        const EventRelayTarget &firstTarget = candidate.targets.front();
+        char buffer[384];
+        if (!candidate.sourceStart.empty() && candidate.sourceDurationSeconds >= 0) {
+            std::snprintf(
+                buffer,
+                sizeof(buffer),
+                "group=0x%x sourceNid=0x%x sourceTsid=0x%x sourceSid=0x%x sourceEid=0x%x targetNid=0x%x targetTsid=0x%x targetSid=0x%x targetEid=0x%x sourceStart=%s sourceDuration=%d",
+                candidate.groupType,
+                candidate.sourceNetworkId,
+                candidate.sourceTransportStreamId,
+                candidate.sourceServiceId,
+                candidate.sourceEventId,
+                firstTarget.networkId,
+                firstTarget.transportStreamId,
+                firstTarget.serviceId,
+                firstTarget.eventId,
+                candidate.sourceStart.c_str(),
+                candidate.sourceDurationSeconds
+            );
+        } else {
+            std::snprintf(
+                buffer,
+                sizeof(buffer),
+                "group=0x%x sourceNid=0x%x sourceTsid=0x%x sourceSid=0x%x sourceEid=0x%x targetNid=0x%x targetTsid=0x%x targetSid=0x%x targetEid=0x%x",
+                candidate.groupType,
+                candidate.sourceNetworkId,
+                candidate.sourceTransportStreamId,
+                candidate.sourceServiceId,
+                candidate.sourceEventId,
+                firstTarget.networkId,
+                firstTarget.transportStreamId,
+                firstTarget.serviceId,
+                firstTarget.eventId
+            );
+        }
+        std::string label = buffer;
+        label += " targets=";
+        char targetBuffer[80];
+        for (size_t index = 0; index < candidate.targets.size(); ++index) {
+            const EventRelayTarget &target = candidate.targets[index];
+            if (index > 0) {
+                label += ",";
+            }
+            std::snprintf(
+                targetBuffer,
+                sizeof(targetBuffer),
+                "0x%x/0x%x/0x%x/0x%x",
+                target.networkId,
+                target.transportStreamId,
+                target.serviceId,
+                target.eventId
+            );
+            label += targetBuffer;
+        }
+        return label;
     }
 
     int outputAudioPid() const

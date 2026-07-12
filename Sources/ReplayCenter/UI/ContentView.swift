@@ -158,6 +158,7 @@ struct ContentView: View {
                             forceHover: windowChrome.forceFocusedTileHover && model.focusedIndex == index,
                             topOverlayInset: topOverlayInset,
                             channelProgramInfo: model.channelProgramOverlayInfo(for: tile),
+                            eventRelayText: model.eventRelayOverlayText(for: tile),
                             channelProgramOverlayVisibility: model.settings.channelProgramOverlayVisibility ?? .onHover
                         ) {
                             if tile.stream != nil {
