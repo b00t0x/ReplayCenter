@@ -11,6 +11,7 @@ final class TileModel: Identifiable {
     private(set) var audioStreamState: AudioStreamState
     private(set) var broadcastClockState: BroadcastClockState?
     private(set) var eventRelayCandidate: EventRelayCandidate?
+    private(set) var inferredEventRelayStatus: String?
     private(set) var eventRelayFollowStatus: String?
     private(set) var currentAudioSelection: AudioSelection
     private(set) var isMuted: Bool
@@ -31,6 +32,7 @@ final class TileModel: Identifiable {
         audioStreamState = .unknown
         broadcastClockState = nil
         eventRelayCandidate = nil
+        inferredEventRelayStatus = nil
         eventRelayFollowStatus = nil
         currentAudioSelection = AudioSelection(audioMode: stream?.audioMode ?? .left)
         isMuted = true
@@ -66,6 +68,7 @@ final class TileModel: Identifiable {
         playbackState = .idle
         audioStreamState = .unknown
         broadcastClockState = nil
+        inferredEventRelayStatus = nil
         updateEventRelayCandidate(nil)
         activePipelineID = nil
         player.stop()
@@ -106,6 +109,7 @@ final class TileModel: Identifiable {
         playbackState = .idle
         audioStreamState = .unknown
         broadcastClockState = nil
+        inferredEventRelayStatus = nil
         updateEventRelayCandidate(nil)
         activePipelineID = nil
         player.stop()
@@ -126,6 +130,7 @@ final class TileModel: Identifiable {
         playbackState = .starting
         audioStreamState = .unknown
         broadcastClockState = nil
+        inferredEventRelayStatus = nil
         updateEventRelayCandidate(nil)
         activePipelineID = nil
         player.stop()
@@ -270,6 +275,10 @@ final class TileModel: Identifiable {
 
     func setEventRelayFollowStatus(_ status: String?) {
         eventRelayFollowStatus = status
+    }
+
+    func setInferredEventRelayStatus(_ status: String?) {
+        inferredEventRelayStatus = status
     }
 
     private func updateEventRelayCandidate(_ candidate: EventRelayCandidate?) {

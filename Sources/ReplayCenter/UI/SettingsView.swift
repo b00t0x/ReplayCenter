@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var showStreamInfoOverlay: Bool
     @State private var showChannelProgramOverlayAlways: Bool
     @State private var followEventRelays: Bool
+    @State private var inferEventRelaysFromProgramGuide: Bool
     @State private var highlightedProgramGenres: [ProgramGenreCode]
     @State private var dimmedProgramGenres: [ProgramGenreCode]
     @State private var draggingProgramGenre: ProgramGenreDragItem?
@@ -51,6 +52,9 @@ struct SettingsView: View {
             initialValue: (model.settings.channelProgramOverlayVisibility ?? .onHover) == .always
         )
         _followEventRelays = State(initialValue: model.settings.followEventRelays ?? true)
+        _inferEventRelaysFromProgramGuide = State(
+            initialValue: model.settings.inferEventRelaysFromProgramGuide ?? false
+        )
         let programGenreDisplaySettings = model.settings.programGenreDisplaySettings ?? .preset
         _highlightedProgramGenres = State(initialValue: programGenreDisplaySettings.highlightedGenres)
         _dimmedProgramGenres = State(initialValue: programGenreDisplaySettings.dimmedGenres)
@@ -241,6 +245,13 @@ struct SettingsView: View {
                     title: "リレー中継を自動追従",
                     isOn: $followEventRelays
                 )
+                LeadingSwitchRow(
+                    title: "番組情報からリレー先を推定",
+                    detail: "放送波にリレー情報がない場合だけ使用します。",
+                    isOn: $inferEventRelaysFromProgramGuide
+                )
+                .disabled(!followEventRelays)
+                .opacity(followEventRelays ? 1 : 0.45)
             }
 
             VStack(alignment: .leading, spacing: 12) {
@@ -482,6 +493,7 @@ struct SettingsView: View {
             showStreamInfoOverlay: showStreamInfoOverlay,
             channelProgramOverlayVisibility: showChannelProgramOverlayAlways ? .always : .onHover,
             followEventRelays: followEventRelays,
+            inferEventRelaysFromProgramGuide: inferEventRelaysFromProgramGuide,
             programGenreDisplaySettings: ProgramGenreDisplaySettings(
                 highlightedGenres: highlightedProgramGenres,
                 dimmedGenres: dimmedProgramGenres

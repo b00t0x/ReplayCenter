@@ -19,6 +19,18 @@ struct EPGStationClient {
         ])
     }
 
+    func fetchSchedules(startAt: Date, endAt: Date) async throws -> [BroadcastingSchedule] {
+        try await get("api/schedules", queryItems: [
+            URLQueryItem(name: "startAt", value: String(Int(startAt.timeIntervalSince1970 * 1_000))),
+            URLQueryItem(name: "endAt", value: String(Int(endAt.timeIntervalSince1970 * 1_000))),
+            URLQueryItem(name: "isHalfWidth", value: "true"),
+            URLQueryItem(name: "GR", value: "true"),
+            URLQueryItem(name: "BS", value: "true"),
+            URLQueryItem(name: "CS", value: "true"),
+            URLQueryItem(name: "SKY", value: "true")
+        ])
+    }
+
     func fetchConfig() async throws -> EPGStationConfig {
         try await get("api/config")
     }
